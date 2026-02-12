@@ -12,6 +12,7 @@ import CalendarPage from "@/pages/CalendarPage";
 import Habits from "@/pages/Habits";
 import Analytics from "@/pages/Analytics";
 import Planning from "@/pages/Planning";
+import Notifications from "@/pages/Notifications";
 import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
 
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/habits" element={<Habits />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/planning" element={<Planning />} />
+              <Route path="/notifications" element={<Notifications />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />

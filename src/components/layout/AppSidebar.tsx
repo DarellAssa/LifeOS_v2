@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, CheckSquare, Target, CalendarDays,
-  Repeat, BarChart3, ClipboardList, Settings,
+  Repeat, BarChart3, ClipboardList, Settings, Bell,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -16,6 +16,7 @@ const navItems = [
   { title: 'Habits', url: '/habits', icon: Repeat },
   { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   { title: 'Planning', url: '/planning', icon: ClipboardList },
+  { title: 'Notifications', url: '/notifications', icon: Bell },
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
 

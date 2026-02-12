@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap, CalendarDays, Heart, Activity, Brain } from 'lucide-react';
+import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap, CalendarDays, Heart, Activity, Brain, Bell } from 'lucide-react';
 import { getHabitStreak, computeGoalProgress, getGoalDisplayStatus, computeLifeScore } from '@/lib/stats';
 import { format, addDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +32,7 @@ export default function Dashboard() {
     getPinnedFocus, setPinnedFocus, getActiveGoals, getBehindGoals, getGoalsDueSoon: getGoalsDueSoonCtx,
     getAgendaForDay, createFocusBlockFromTask,
     getCheckInForDate, upsertDailyCheckIn, generateLifeScoreForDate, getLifeScoreForDate,
+    markNotificationRead,
   } = useAppContext();
   const navigate = useNavigate();
   const { tasks, goals, habits } = data;
@@ -175,12 +176,61 @@ export default function Dashboard() {
     return [...active].sort((a, b) => getHabitStreak(b) - getHabitStreak(a)).slice(0, 3);
   }, [habits]);
 
+  // Alerts
+  const topAlerts = useMemo(() => {
+    return [...data.notifications]
+      .filter(n => !n.readAt && !n.dismissedAt && (!n.snoozedUntil || n.snoozedUntil <= new Date().toISOString()))
+      .sort((a, b) => {
+        const sev = { critical: 0, warning: 1, info: 2 };
+        return (sev[a.severity] ?? 2) - (sev[b.severity] ?? 2) || b.createdAt.localeCompare(a.createdAt);
+      })
+      .slice(0, 3);
+  }, [data.notifications]);
+
+  const dailyDigest = useMemo(() => {
+    const parts: string[] = [];
+    if (overdue.length) parts.push(`${overdue.length} overdue task${overdue.length > 1 ? 's' : ''}`);
+    if (behindGoals.length) parts.push(`${behindGoals.length} goal${behindGoals.length > 1 ? 's' : ''} behind`);
+    const unloggedHabits = habits.filter(h => (h as any).status !== 'archived' && h.frequency === 'daily' && !h.logs.includes(todayStr));
+    if (unloggedHabits.length) parts.push(`${unloggedHabits.length} habit${unloggedHabits.length > 1 ? 's' : ''} to log`);
+    return parts.length > 0 ? `Today: ${parts.join(', ')}` : null;
+  }, [overdue, behindGoals, habits, todayStr]);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Good {greeting}, {data.profile.name}</h1>
         <p className="text-muted-foreground text-sm mt-1">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
+
+      {/* Daily Digest Banner */}
+      {dailyDigest && (
+        <button onClick={() => navigate('/notifications')} className="w-full flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm hover:bg-primary/10 transition-colors">
+          <Bell className="h-4 w-4 text-primary shrink-0" />
+          <span>{dailyDigest}</span>
+          <ArrowRight className="h-3 w-3 ml-auto text-muted-foreground" />
+        </button>
+      )}
+
+      {/* Alerts */}
+      {topAlerts.length > 0 && (
+        <div className="space-y-2">
+          {topAlerts.map(n => (
+            <div key={n.id} className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${n.severity === 'critical' ? 'border-destructive/30 bg-destructive/5' : n.severity === 'warning' ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-border'}`}>
+              <div className={`h-2 w-2 rounded-full shrink-0 ${n.severity === 'critical' ? 'bg-destructive' : n.severity === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'}`} />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{n.title}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{n.message}</p>
+              </div>
+              {n.action && (
+                <Button size="sm" variant="outline" className="h-7 text-[10px] shrink-0" onClick={() => { markNotificationRead(n.id); navigate(n.action!.route); }}>
+                  {n.action.label}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Daily Check-in + Life Score row */}
       <div className="grid md:grid-cols-2 gap-4">

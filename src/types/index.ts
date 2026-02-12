@@ -137,6 +137,65 @@ export interface LifeScoreSnapshot {
   createdAt: string;
 }
 
+export type NotificationType =
+  | 'task_overdue'
+  | 'task_due_soon'
+  | 'goal_behind'
+  | 'goal_overdue'
+  | 'event_upcoming'
+  | 'focus_missed'
+  | 'habit_missed'
+  | 'checkin_missing'
+  | 'weekly_review_missing';
+
+export type NotificationSeverity = 'info' | 'warning' | 'critical';
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  severity: NotificationSeverity;
+  createdAt: string;
+  readAt?: string;
+  dismissedAt?: string;
+  snoozedUntil?: string;
+  entityRef?: { kind: 'task' | 'goal' | 'event' | 'focusBlock' | 'habit' | 'checkin' | 'weeklyPlan'; id: string };
+  action?: { label: string; route: string };
+}
+
+export interface NotificationSettings {
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  enabledTypes: Record<NotificationType, boolean>;
+  dueSoonDays: number;
+  eventUpcomingMinutes: number;
+  dailyDigestTime?: string;
+  maxNotificationsPerDay: number;
+}
+
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  quietHoursEnabled: false,
+  quietHoursStart: '22:00',
+  quietHoursEnd: '07:00',
+  enabledTypes: {
+    task_overdue: true,
+    task_due_soon: true,
+    goal_behind: true,
+    goal_overdue: true,
+    event_upcoming: true,
+    focus_missed: true,
+    habit_missed: true,
+    checkin_missing: true,
+    weekly_review_missing: true,
+  },
+  dueSoonDays: 2,
+  eventUpcomingMinutes: 60,
+  dailyDigestTime: '09:00',
+  maxNotificationsPerDay: 12,
+};
+
 export interface WeeklyPlan {
   id: string;
   weekStartDate: string;
@@ -164,6 +223,8 @@ export interface AppData {
   dailyCheckIns: DailyCheckIn[];
   lifeScoreSnapshots: LifeScoreSnapshot[];
   weeklyPlans: WeeklyPlan[];
+  notifications: NotificationItem[];
+  notificationSettings: NotificationSettings;
   profile: UserProfile;
   pinnedFocus: PinnedFocus;
 }

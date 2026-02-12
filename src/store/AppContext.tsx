@@ -1,12 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, DailyCheckIn, LifeScoreSnapshot, WeeklyPlan, UserProfile, GoalDisplayStatus } from '@/types';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, DailyCheckIn, LifeScoreSnapshot, WeeklyPlan, UserProfile, GoalDisplayStatus, NotificationItem, NotificationSettings, DEFAULT_NOTIFICATION_SETTINGS } from '@/types';
 import { seedData } from './seedData';
 import { toast } from '@/hooks/use-toast';
-import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays, addMinutes, isSameDay, parseISO } from 'date-fns';
+import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays, addMinutes, isSameDay, parseISO, subDays } from 'date-fns';
 import { computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon as getGoalsDueSoonUtil, computeLifeScore } from '@/lib/stats';
+import { generateNotifications, isQuietHours } from '@/lib/notifications';
 
 const STORAGE_KEY = 'lifeos-data';
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 function loadData(): AppData {
   try {
@@ -14,7 +15,7 @@ function loadData(): AppData {
     if (raw) {
       const parsed = JSON.parse(raw) as AppData;
       if (parsed.schemaVersion === SCHEMA_VERSION) return parsed;
-      // Migration from v2/v3/v4 to v5
+      // Migration from v2/v3/v4/v5 to v6
       if (parsed.schemaVersion >= 2) {
         return {
           ...parsed,
@@ -22,6 +23,8 @@ function loadData(): AppData {
           focusBlocks: (parsed as any).focusBlocks || [],
           dailyCheckIns: (parsed as any).dailyCheckIns || [],
           lifeScoreSnapshots: (parsed as any).lifeScoreSnapshots || [],
+          notifications: (parsed as any).notifications || [],
+          notificationSettings: (parsed as any).notificationSettings || DEFAULT_NOTIFICATION_SETTINGS,
           goals: parsed.goals.map((g: any) => ({
             ...g,
             createdAt: g.createdAt || new Date().toISOString(),
@@ -134,6 +137,16 @@ interface AppContextType {
   getAgendaForDay: (dateISO: string) => AgendaItem[];
   getPlannedFocusMinutes: (startDate: string, endDate: string) => number;
   getCompletedFocusMinutes: (startDate: string, endDate: string) => number;
+  // Notifications
+  addNotification: (item: NotificationItem) => void;
+  markNotificationRead: (id: string) => void;
+  dismissNotification: (id: string) => void;
+  snoozeNotification: (id: string, untilISO: string) => void;
+  markAllRead: () => void;
+  clearDismissed: (olderThanDays?: number) => void;
+  updateNotificationSettings: (updates: Partial<NotificationSettings>) => void;
+  runNotificationGeneration: () => void;
+  getUnreadNotificationCount: () => number;
 }
 
 export type AgendaItem = {
@@ -434,7 +447,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const importData = useCallback((json: string, mode: 'replace' | 'merge') => {
     try {
       const imported = JSON.parse(json) as AppData;
-      if (mode === 'replace') { setData({ ...imported, schemaVersion: SCHEMA_VERSION, focusBlocks: imported.focusBlocks || [], dailyCheckIns: imported.dailyCheckIns || [], lifeScoreSnapshots: imported.lifeScoreSnapshots || [] }); } else {
+      if (mode === 'replace') { setData({ ...imported, schemaVersion: SCHEMA_VERSION, focusBlocks: imported.focusBlocks || [], dailyCheckIns: imported.dailyCheckIns || [], lifeScoreSnapshots: imported.lifeScoreSnapshots || [], notifications: imported.notifications || [], notificationSettings: imported.notificationSettings || DEFAULT_NOTIFICATION_SETTINGS }); } else {
         update(d => ({
           ...d,
           tasks: [...d.tasks, ...imported.tasks.filter(t => !d.tasks.some(x => x.id === t.id))],
@@ -444,6 +457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           focusBlocks: [...d.focusBlocks, ...(imported.focusBlocks || []).filter(fb => !d.focusBlocks.some(x => x.id === fb.id))],
           dailyCheckIns: [...d.dailyCheckIns, ...(imported.dailyCheckIns || []).filter(c => !d.dailyCheckIns.some(x => x.date === c.date))],
           lifeScoreSnapshots: [...d.lifeScoreSnapshots, ...(imported.lifeScoreSnapshots || []).filter(s => !d.lifeScoreSnapshots.some(x => x.date === s.date))],
+          notifications: [...d.notifications, ...(imported.notifications || []).filter(n => !d.notifications.some(x => x.id === n.id))],
         }));
       }
       toast({ title: `Data ${mode === 'replace' ? 'replaced' : 'merged'} successfully` });
@@ -537,6 +551,71 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .reduce((sum, fb) => sum + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
   }, [data.focusBlocks]);
 
+  // ── Notifications ──
+  const addNotification = useCallback((item: NotificationItem) => {
+    update(d => ({ ...d, notifications: [...d.notifications, item] }));
+  }, [update]);
+
+  const markNotificationRead = useCallback((id: string) => {
+    update(d => ({ ...d, notifications: d.notifications.map(n => n.id === id ? { ...n, readAt: new Date().toISOString() } : n) }));
+  }, [update]);
+
+  const dismissNotification = useCallback((id: string) => {
+    update(d => ({ ...d, notifications: d.notifications.map(n => n.id === id ? { ...n, dismissedAt: new Date().toISOString() } : n) }));
+  }, [update]);
+
+  const snoozeNotification = useCallback((id: string, untilISO: string) => {
+    update(d => ({ ...d, notifications: d.notifications.map(n => n.id === id ? { ...n, snoozedUntil: untilISO } : n) }));
+    toast({ title: 'Notification snoozed' });
+  }, [update]);
+
+  const markAllRead = useCallback(() => {
+    const now = new Date().toISOString();
+    update(d => ({ ...d, notifications: d.notifications.map(n => n.readAt ? n : { ...n, readAt: now }) }));
+    toast({ title: 'All notifications marked read' });
+  }, [update]);
+
+  const clearDismissed = useCallback((olderThanDays: number = 30) => {
+    const cutoff = subDays(new Date(), olderThanDays).toISOString();
+    update(d => ({ ...d, notifications: d.notifications.filter(n => !n.dismissedAt || n.dismissedAt > cutoff) }));
+  }, [update]);
+
+  const updateNotificationSettings = useCallback((updates: Partial<NotificationSettings>) => {
+    update(d => ({ ...d, notificationSettings: { ...d.notificationSettings, ...updates } }));
+    toast({ title: 'Notification settings updated' });
+  }, [update]);
+
+  const runNotificationGeneration = useCallback(() => {
+    const newNotifs = generateNotifications(data);
+    if (newNotifs.length > 0) {
+      update(d => ({ ...d, notifications: [...d.notifications, ...newNotifs] }));
+      const settings = data.notificationSettings || DEFAULT_NOTIFICATION_SETTINGS;
+      if (!isQuietHours(settings)) {
+        const critical = newNotifs.filter(n => n.severity === 'critical' || n.severity === 'warning');
+        critical.slice(0, 2).forEach(n => {
+          toast({ title: n.title, description: n.message });
+        });
+      }
+    }
+  }, [data, update]);
+
+  const getUnreadNotificationCount = useCallback((): number => {
+    return data.notifications.filter(n => !n.readAt && !n.dismissedAt && (!n.snoozedUntil || n.snoozedUntil <= new Date().toISOString())).length;
+  }, [data.notifications]);
+
+  // Generate notifications on load and periodically
+  const lastGenRef = useRef<string>('');
+  useEffect(() => {
+    const key = format(new Date(), 'yyyy-MM-dd-HH');
+    if (lastGenRef.current !== key) {
+      lastGenRef.current = key;
+      const newNotifs = generateNotifications(data);
+      if (newNotifs.length > 0) {
+        setData(prev => ({ ...prev, notifications: [...prev.notifications, ...newNotifs] }));
+      }
+    }
+  }, [data.tasks, data.goals, data.habits, data.focusBlocks, data.dailyCheckIns]);
+
   return (
     <AppContext.Provider value={{
       data, addTask, updateTask, deleteTask, toggleTaskDone, changeTaskStatus, scheduleTask, unscheduleTask,
@@ -554,6 +633,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       getTodayTasks, getOverdueTasks, getThisWeekCommittedTasks,
       completionRateThisWeek, tasksCompletedPerDayThisWeek, avgCompletionTime,
       getEventsForDay, getBlocksForDay, getAgendaForDay, getPlannedFocusMinutes, getCompletedFocusMinutes,
+      addNotification, markNotificationRead, dismissNotification, snoozeNotification, markAllRead, clearDismissed,
+      updateNotificationSettings, runNotificationGeneration, getUnreadNotificationCount,
     }}>
       {children}
     </AppContext.Provider>
