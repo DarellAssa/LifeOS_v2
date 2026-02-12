@@ -1,12 +1,14 @@
 import {
   LayoutDashboard, CheckSquare, Target, CalendarDays,
-  Repeat, BarChart3, ClipboardList, Settings, Bell,
+  Repeat, BarChart3, ClipboardList, Settings, Bell, Inbox,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from '@/components/ui/sidebar';
+import { useAppContext } from '@/store/AppContext';
+import { Badge } from '@/components/ui/badge';
 
 const navItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
@@ -14,6 +16,7 @@ const navItems = [
   { title: 'Goals', url: '/goals', icon: Target },
   { title: 'Calendar', url: '/calendar', icon: CalendarDays },
   { title: 'Habits', url: '/habits', icon: Repeat },
+  { title: 'Inbox', url: '/inbox', icon: Inbox },
   { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   { title: 'Planning', url: '/planning', icon: ClipboardList },
   { title: 'Notifications', url: '/notifications', icon: Bell },
@@ -23,6 +26,8 @@ const navItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
+  const { data } = useAppContext();
+  const inboxCount = data.inboxItems.filter(i => i.status === 'unprocessed').length;
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -48,7 +53,14 @@ export function AppSidebar() {
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span>{item.title}</span>}
+                      {!collapsed && (
+                        <span className="flex items-center gap-2 flex-1">
+                          {item.title}
+                          {item.title === 'Inbox' && inboxCount > 0 && (
+                            <Badge variant="destructive" className="text-[8px] h-4 px-1 ml-auto">{inboxCount}</Badge>
+                          )}
+                        </span>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

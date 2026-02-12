@@ -1,4 +1,4 @@
-import { Search, Moon, Sun, Bell } from 'lucide-react';
+import { Search, Moon, Sun, Bell, Inbox } from 'lucide-react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ interface AppHeaderProps {
 
 export function AppHeader({ onOpenSearch, onOpenCommandPalette }: AppHeaderProps) {
   const { theme, toggleTheme } = useTheme();
-  const { data, markNotificationRead, getUnreadNotificationCount } = useAppContext();
+  const { data, markNotificationRead, getUnreadNotificationCount, addInboxItem } = useAppContext();
   const navigate = useNavigate();
   const [bellOpen, setBellOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);

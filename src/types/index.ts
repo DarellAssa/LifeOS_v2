@@ -146,7 +146,8 @@ export type NotificationType =
   | 'focus_missed'
   | 'habit_missed'
   | 'checkin_missing'
-  | 'weekly_review_missing';
+  | 'weekly_review_missing'
+  | 'inbox_unprocessed';
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
 
@@ -189,6 +190,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
     habit_missed: true,
     checkin_missing: true,
     weekly_review_missing: true,
+    inbox_unprocessed: true,
   },
   dueSoonDays: 2,
   eventUpcomingMinutes: 60,
@@ -213,6 +215,46 @@ export interface PinnedFocus {
   [isoDate: string]: string[];
 }
 
+export type InboxItemSource = 'manual' | 'clipboard' | 'share' | 'import';
+export type InboxItemStatus = 'unprocessed' | 'processing' | 'converted' | 'archived';
+export type ConversionKind = 'task' | 'goal' | 'event' | 'habit' | 'focusBlock' | 'note';
+
+export interface InboxItemDetected {
+  urls: string[];
+  suggestedType?: 'task' | 'goal' | 'event' | 'habit' | 'focus' | 'note';
+  suggestedDateTime?: string;
+}
+
+export interface InboxItemConversion {
+  kind: ConversionKind;
+  entityId: string;
+  convertedAt: string;
+}
+
+export interface InboxItem {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  content: string;
+  title?: string;
+  source: InboxItemSource;
+  status: InboxItemStatus;
+  tags: string[];
+  pinned: boolean;
+  detected: InboxItemDetected;
+  conversion?: InboxItemConversion;
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  tags: string[];
+  pinned: boolean;
+}
+
 export interface AppData {
   schemaVersion: number;
   tasks: Task[];
@@ -225,6 +267,8 @@ export interface AppData {
   weeklyPlans: WeeklyPlan[];
   notifications: NotificationItem[];
   notificationSettings: NotificationSettings;
+  inboxItems: InboxItem[];
+  notes: Note[];
   profile: UserProfile;
   pinnedFocus: PinnedFocus;
 }

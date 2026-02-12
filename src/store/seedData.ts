@@ -11,7 +11,7 @@ const fmtDT = (d: Date, h: number, m = 0) => {
 const now = new Date().toISOString();
 
 export const seedData: AppData = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   profile: { name: 'Alex', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, weekStartDay: 'monday' },
   pinnedFocus: { [fmt(today)]: ['t1', 't2'] },
   tasks: [
@@ -53,4 +53,6 @@ export const seedData: AppData = {
   weeklyPlans: [],
   notifications: [],
   notificationSettings: DEFAULT_NOTIFICATION_SETTINGS,
+  inboxItems: [],
+  notes: [],
 };

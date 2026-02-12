@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap, CalendarDays, Heart, Activity, Brain, Bell } from 'lucide-react';
+import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap, CalendarDays, Heart, Activity, Brain, Bell, Inbox } from 'lucide-react';
 import { getHabitStreak, computeGoalProgress, getGoalDisplayStatus, computeLifeScore } from '@/lib/stats';
 import { format, addDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
