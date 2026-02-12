@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, DailyCheckIn, LifeScoreSnapshot, WeeklyPlan, UserProfile, GoalDisplayStatus, NotificationItem, NotificationSettings, DEFAULT_NOTIFICATION_SETTINGS } from '@/types';
+import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, DailyCheckIn, LifeScoreSnapshot, WeeklyPlan, UserProfile, GoalDisplayStatus, NotificationItem, NotificationSettings, DEFAULT_NOTIFICATION_SETTINGS, InboxItem, Note } from '@/types';
 import { seedData } from './seedData';
 import { toast } from '@/hooks/use-toast';
 import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays, addMinutes, isSameDay, parseISO, subDays } from 'date-fns';
 import { computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon as getGoalsDueSoonUtil, computeLifeScore } from '@/lib/stats';
 import { generateNotifications, isQuietHours } from '@/lib/notifications';
+import { detectInboxContent, deriveTitle } from '@/lib/inbox';
 
 const STORAGE_KEY = 'lifeos-data';
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 function loadData(): AppData {
   try {
@@ -15,7 +16,7 @@ function loadData(): AppData {
     if (raw) {
       const parsed = JSON.parse(raw) as AppData;
       if (parsed.schemaVersion === SCHEMA_VERSION) return parsed;
-      // Migration from v2/v3/v4/v5 to v6
+      // Migration from v2-v6 to v7
       if (parsed.schemaVersion >= 2) {
         return {
           ...parsed,
@@ -25,6 +26,8 @@ function loadData(): AppData {
           lifeScoreSnapshots: (parsed as any).lifeScoreSnapshots || [],
           notifications: (parsed as any).notifications || [],
           notificationSettings: (parsed as any).notificationSettings || DEFAULT_NOTIFICATION_SETTINGS,
+          inboxItems: (parsed as any).inboxItems || [],
+          notes: (parsed as any).notes || [],
           goals: parsed.goals.map((g: any) => ({
             ...g,
             createdAt: g.createdAt || new Date().toISOString(),
@@ -147,6 +150,24 @@ interface AppContextType {
   updateNotificationSettings: (updates: Partial<NotificationSettings>) => void;
   runNotificationGeneration: () => void;
   getUnreadNotificationCount: () => number;
+  // Inbox
+  addInboxItem: (content: string, source?: InboxItem['source']) => InboxItem;
+  updateInboxItem: (id: string, updates: Partial<InboxItem>) => void;
+  deleteInboxItem: (id: string) => void;
+  archiveInboxItem: (id: string) => void;
+  pinInboxItem: (id: string, pinned: boolean) => void;
+  setInboxStatus: (id: string, status: InboxItem['status']) => void;
+  convertInboxToTask: (inboxId: string, payload: Partial<Task>) => void;
+  convertInboxToGoal: (inboxId: string, payload: Partial<Goal>) => void;
+  convertInboxToEvent: (inboxId: string, payload: Partial<CalendarEvent>) => void;
+  convertInboxToHabit: (inboxId: string, payload: Partial<Habit>) => void;
+  convertInboxToFocusBlock: (inboxId: string, payload: Partial<FocusBlock>) => void;
+  convertInboxToNote: (inboxId: string, payload: Partial<Note>) => void;
+  // Notes
+  createNote: (note: Note) => void;
+  updateNote: (id: string, updates: Partial<Note>) => void;
+  deleteNote: (id: string) => void;
+  pinNote: (id: string, pinned: boolean) => void;
 }
 
 export type AgendaItem = {
@@ -447,7 +468,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const importData = useCallback((json: string, mode: 'replace' | 'merge') => {
     try {
       const imported = JSON.parse(json) as AppData;
-      if (mode === 'replace') { setData({ ...imported, schemaVersion: SCHEMA_VERSION, focusBlocks: imported.focusBlocks || [], dailyCheckIns: imported.dailyCheckIns || [], lifeScoreSnapshots: imported.lifeScoreSnapshots || [], notifications: imported.notifications || [], notificationSettings: imported.notificationSettings || DEFAULT_NOTIFICATION_SETTINGS }); } else {
+      if (mode === 'replace') {
+        setData({ ...imported, schemaVersion: SCHEMA_VERSION, focusBlocks: imported.focusBlocks || [], dailyCheckIns: imported.dailyCheckIns || [], lifeScoreSnapshots: imported.lifeScoreSnapshots || [], notifications: imported.notifications || [], notificationSettings: imported.notificationSettings || DEFAULT_NOTIFICATION_SETTINGS, inboxItems: (imported as any).inboxItems || [], notes: (imported as any).notes || [] });
+      } else {
         update(d => ({
           ...d,
           tasks: [...d.tasks, ...imported.tasks.filter(t => !d.tasks.some(x => x.id === t.id))],
@@ -458,6 +481,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           dailyCheckIns: [...d.dailyCheckIns, ...(imported.dailyCheckIns || []).filter(c => !d.dailyCheckIns.some(x => x.date === c.date))],
           lifeScoreSnapshots: [...d.lifeScoreSnapshots, ...(imported.lifeScoreSnapshots || []).filter(s => !d.lifeScoreSnapshots.some(x => x.date === s.date))],
           notifications: [...d.notifications, ...(imported.notifications || []).filter(n => !d.notifications.some(x => x.id === n.id))],
+          inboxItems: [...d.inboxItems, ...((imported as any).inboxItems || []).filter((i: any) => !d.inboxItems.some(x => x.id === i.id))],
+          notes: [...d.notes, ...((imported as any).notes || []).filter((n: any) => !d.notes.some(x => x.id === n.id))],
         }));
       }
       toast({ title: `Data ${mode === 'replace' ? 'replaced' : 'merged'} successfully` });
@@ -614,7 +639,187 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setData(prev => ({ ...prev, notifications: [...prev.notifications, ...newNotifs] }));
       }
     }
-  }, [data.tasks, data.goals, data.habits, data.focusBlocks, data.dailyCheckIns]);
+  }, [data.tasks, data.goals, data.habits, data.focusBlocks, data.dailyCheckIns, data.inboxItems]);
+
+  // ── Inbox ──
+  const addInboxItem = useCallback((content: string, source: InboxItem['source'] = 'manual'): InboxItem => {
+    const now = new Date().toISOString();
+    const detected = detectInboxContent(content);
+    const item: InboxItem = {
+      id: crypto.randomUUID(), createdAt: now, updatedAt: now,
+      content, title: deriveTitle(content), source, status: 'unprocessed',
+      tags: [], pinned: false, detected,
+    };
+    update(d => ({ ...d, inboxItems: [...d.inboxItems, item] }));
+    toast({ title: 'Saved to Inbox', description: item.title });
+    return item;
+  }, [update]);
+
+  const updateInboxItem = useCallback((id: string, updates: Partial<InboxItem>) => {
+    update(d => ({
+      ...d, inboxItems: d.inboxItems.map(i => {
+        if (i.id !== id) return i;
+        const updated = { ...i, ...updates, updatedAt: new Date().toISOString() };
+        if (updates.content) updated.detected = detectInboxContent(updates.content);
+        return updated;
+      }),
+    }));
+  }, [update]);
+
+  const deleteInboxItem = useCallback((id: string) => {
+    update(d => ({ ...d, inboxItems: d.inboxItems.filter(i => i.id !== id) }));
+    toast({ title: 'Inbox item deleted' });
+  }, [update]);
+
+  const archiveInboxItem = useCallback((id: string) => {
+    update(d => ({ ...d, inboxItems: d.inboxItems.map(i => i.id === id ? { ...i, status: 'archived' as const, updatedAt: new Date().toISOString() } : i) }));
+    toast({ title: 'Archived' });
+  }, [update]);
+
+  const pinInboxItem = useCallback((id: string, pinned: boolean) => {
+    update(d => ({ ...d, inboxItems: d.inboxItems.map(i => i.id === id ? { ...i, pinned, updatedAt: new Date().toISOString() } : i) }));
+  }, [update]);
+
+  const setInboxStatus = useCallback((id: string, status: InboxItem['status']) => {
+    update(d => ({ ...d, inboxItems: d.inboxItems.map(i => i.id === id ? { ...i, status, updatedAt: new Date().toISOString() } : i) }));
+  }, [update]);
+
+  const markInboxConverted = useCallback((inboxId: string, kind: InboxItem['conversion'] extends undefined ? never : NonNullable<InboxItem['conversion']>['kind'], entityId: string) => {
+    update(d => ({
+      ...d, inboxItems: d.inboxItems.map(i => i.id === inboxId ? {
+        ...i, status: 'converted' as const, updatedAt: new Date().toISOString(),
+        conversion: { kind, entityId, convertedAt: new Date().toISOString() },
+      } : i),
+    }));
+  }, [update]);
+
+  const convertInboxToTask = useCallback((inboxId: string, payload: Partial<Task>) => {
+    const item = data.inboxItems.find(i => i.id === inboxId);
+    if (!item) return;
+    const task: Task = {
+      id: crypto.randomUUID(), title: payload.title || item.title || deriveTitle(item.content),
+      description: payload.description || item.content, status: payload.status || 'todo',
+      priority: payload.priority || 'med', dueDate: payload.dueDate,
+      createdAt: new Date().toISOString(), tags: payload.tags || item.tags,
+      subtasks: payload.subtasks || [], goalId: payload.goalId,
+    };
+    update(d => ({
+      ...d, tasks: [...d.tasks, task],
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: new Date().toISOString(), conversion: { kind: 'task' as const, entityId: task.id, convertedAt: new Date().toISOString() } } : i),
+    }));
+    toast({ title: 'Converted to Task', description: task.title });
+  }, [update, data.inboxItems]);
+
+  const convertInboxToGoal = useCallback((inboxId: string, payload: Partial<Goal>) => {
+    const item = data.inboxItems.find(i => i.id === inboxId);
+    if (!item) return;
+    const now = new Date().toISOString();
+    const goal: Goal = {
+      id: crypto.randomUUID(), title: payload.title || item.title || deriveTitle(item.content),
+      description: payload.description || item.content, category: payload.category || 'custom',
+      status: 'active', startDate: payload.startDate || format(new Date(), 'yyyy-MM-dd'),
+      targetDate: payload.targetDate || format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+      progressType: payload.progressType || 'manual', progressValue: payload.progressValue || 0,
+      linkedTaskIds: payload.linkedTaskIds || [], milestones: payload.milestones || [],
+      createdAt: now, updatedAt: now,
+    };
+    update(d => ({
+      ...d, goals: [...d.goals, goal],
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'goal' as const, entityId: goal.id, convertedAt: now } } : i),
+    }));
+    toast({ title: 'Converted to Goal', description: goal.title });
+  }, [update, data.inboxItems]);
+
+  const convertInboxToEvent = useCallback((inboxId: string, payload: Partial<CalendarEvent>) => {
+    const item = data.inboxItems.find(i => i.id === inboxId);
+    if (!item) return;
+    const now = new Date().toISOString();
+    const startDT = payload.startDateTime || item.detected.suggestedDateTime || now;
+    const event: CalendarEvent = {
+      id: crypto.randomUUID(), title: payload.title || item.title || deriveTitle(item.content),
+      startDateTime: startDT,
+      endDateTime: payload.endDateTime || addMinutes(new Date(startDT), 60).toISOString(),
+      location: payload.location, notes: payload.notes || item.content,
+      category: payload.category || 'personal', recurring: payload.recurring || null,
+      createdAt: now, updatedAt: now,
+    };
+    update(d => ({
+      ...d, events: [...d.events, event],
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'event' as const, entityId: event.id, convertedAt: now } } : i),
+    }));
+    toast({ title: 'Converted to Event', description: event.title });
+  }, [update, data.inboxItems]);
+
+  const convertInboxToHabit = useCallback((inboxId: string, payload: Partial<Habit>) => {
+    const item = data.inboxItems.find(i => i.id === inboxId);
+    if (!item) return;
+    const now = new Date().toISOString();
+    const habit: Habit = {
+      id: crypto.randomUUID(), title: payload.title || item.title || deriveTitle(item.content),
+      description: payload.description || item.content,
+      frequency: payload.frequency || 'daily', targetCountPerPeriod: payload.targetCountPerPeriod || 1,
+      category: payload.category || 'personal', logs: [], createdAt: now, updatedAt: now, status: 'active',
+    };
+    update(d => ({
+      ...d, habits: [...d.habits, habit],
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'habit' as const, entityId: habit.id, convertedAt: now } } : i),
+    }));
+    toast({ title: 'Converted to Habit', description: habit.title });
+  }, [update, data.inboxItems]);
+
+  const convertInboxToFocusBlock = useCallback((inboxId: string, payload: Partial<FocusBlock>) => {
+    const item = data.inboxItems.find(i => i.id === inboxId);
+    if (!item) return;
+    const now = new Date().toISOString();
+    const startDT = payload.startDateTime || item.detected.suggestedDateTime || now;
+    const block: FocusBlock = {
+      id: crypto.randomUUID(), title: payload.title || `Focus: ${item.title || deriveTitle(item.content)}`,
+      startDateTime: startDT,
+      endDateTime: payload.endDateTime || addMinutes(new Date(startDT), 60).toISOString(),
+      linkedTaskId: payload.linkedTaskId, linkedGoalId: payload.linkedGoalId,
+      status: 'planned', notes: payload.notes || item.content, createdAt: now, updatedAt: now,
+    };
+    update(d => ({
+      ...d, focusBlocks: [...d.focusBlocks, block],
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'focusBlock' as const, entityId: block.id, convertedAt: now } } : i),
+    }));
+    toast({ title: 'Converted to Focus Block', description: block.title });
+  }, [update, data.inboxItems]);
+
+  const convertInboxToNote = useCallback((inboxId: string, payload: Partial<Note>) => {
+    const item = data.inboxItems.find(i => i.id === inboxId);
+    if (!item) return;
+    const now = new Date().toISOString();
+    const note: Note = {
+      id: crypto.randomUUID(), title: payload.title || item.title || deriveTitle(item.content),
+      content: payload.content || item.content, createdAt: now, updatedAt: now,
+      tags: payload.tags || item.tags, pinned: payload.pinned || false,
+    };
+    update(d => ({
+      ...d, notes: [...d.notes, note],
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'note' as const, entityId: note.id, convertedAt: now } } : i),
+    }));
+    toast({ title: 'Converted to Note', description: note.title });
+  }, [update, data.inboxItems]);
+
+  // ── Notes ──
+  const createNote = useCallback((note: Note) => {
+    update(d => ({ ...d, notes: [...d.notes, note] }));
+    toast({ title: 'Note created', description: note.title });
+  }, [update]);
+
+  const updateNote = useCallback((id: string, updates: Partial<Note>) => {
+    update(d => ({ ...d, notes: d.notes.map(n => n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n) }));
+  }, [update]);
+
+  const deleteNote = useCallback((id: string) => {
+    update(d => ({ ...d, notes: d.notes.filter(n => n.id !== id) }));
+    toast({ title: 'Note deleted' });
+  }, [update]);
+
+  const pinNote = useCallback((id: string, pinned: boolean) => {
+    update(d => ({ ...d, notes: d.notes.map(n => n.id === id ? { ...n, pinned, updatedAt: new Date().toISOString() } : n) }));
+  }, [update]);
 
   return (
     <AppContext.Provider value={{
@@ -635,6 +840,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       getEventsForDay, getBlocksForDay, getAgendaForDay, getPlannedFocusMinutes, getCompletedFocusMinutes,
       addNotification, markNotificationRead, dismissNotification, snoozeNotification, markAllRead, clearDismissed,
       updateNotificationSettings, runNotificationGeneration, getUnreadNotificationCount,
+      addInboxItem, updateInboxItem, deleteInboxItem, archiveInboxItem, pinInboxItem, setInboxStatus,
+      convertInboxToTask, convertInboxToGoal, convertInboxToEvent, convertInboxToHabit, convertInboxToFocusBlock, convertInboxToNote,
+      createNote, updateNote, deleteNote, pinNote,
     }}>
       {children}
     </AppContext.Provider>

@@ -221,6 +221,21 @@ export function generateNotifications(data: AppData): NotificationItem[] {
     }
   }
 
+  // 9) Inbox unprocessed
+  if ((settings.enabledTypes as any).inbox_unprocessed !== false) {
+    const unprocessed = (data as any).inboxItems?.filter((i: any) => i.status === 'unprocessed') || [];
+    if (unprocessed.length >= 5) {
+      tryAdd({
+        type: 'inbox_unprocessed' as NotificationType,
+        title: `${unprocessed.length} inbox items need processing`,
+        message: 'Review and convert your captured items.',
+        severity: 'warning',
+        entityRef: { kind: 'task', id: 'inbox-summary' },
+        action: { label: 'Process', route: '/inbox' },
+      });
+    }
+  }
+
   return newNotifs;
 }
 

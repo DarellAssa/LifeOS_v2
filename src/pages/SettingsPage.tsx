@@ -22,6 +22,7 @@ const NOTIF_TYPE_LABELS: Record<NotificationType, string> = {
   habit_missed: 'Missed habits',
   checkin_missing: 'Missing daily check-in',
   weekly_review_missing: 'Missing weekly review',
+  inbox_unprocessed: 'Unprocessed inbox items',
 };
 
 export default function SettingsPage() {
