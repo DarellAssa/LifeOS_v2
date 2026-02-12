@@ -1,11 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import { AppData, Task, Goal, CalendarEvent, Habit, WeeklyPlan, UserProfile, PinnedFocus } from '@/types';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { AppData, Task, Goal, CalendarEvent, Habit, WeeklyPlan, UserProfile, GoalDisplayStatus } from '@/types';
 import { seedData } from './seedData';
 import { toast } from '@/hooks/use-toast';
-import { format, startOfWeek, endOfWeek, isWithinInterval, isBefore, startOfDay, isToday, differenceInMinutes } from 'date-fns';
+import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays } from 'date-fns';
+import { computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon as getGoalsDueSoonUtil } from '@/lib/stats';
 
 const STORAGE_KEY = 'lifeos-data';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function loadData(): AppData {
   try {
@@ -13,6 +14,21 @@ function loadData(): AppData {
     if (raw) {
       const parsed = JSON.parse(raw) as AppData;
       if (parsed.schemaVersion === SCHEMA_VERSION) return parsed;
+      // Migration: add missing fields for older schema
+      if (parsed.schemaVersion === 2) {
+        return {
+          ...parsed,
+          schemaVersion: SCHEMA_VERSION,
+          goals: parsed.goals.map((g: any) => ({
+            ...g,
+            createdAt: g.createdAt || new Date().toISOString(),
+            updatedAt: g.updatedAt || new Date().toISOString(),
+            milestones: (g.milestones || []).map((m: any) => ({
+              id: m.id, title: m.title, date: m.date || m.targetDate, done: m.done ?? m.completed ?? false,
+            })),
+          })),
+        };
+      }
     }
   } catch { /* use seed */ }
   return JSON.parse(JSON.stringify(seedData));
@@ -34,6 +50,17 @@ interface AppContextType {
   addGoal: (goal: Goal) => void;
   updateGoal: (id: string, updates: Partial<Goal>) => void;
   deleteGoal: (id: string) => void;
+  archiveGoal: (id: string) => void;
+  completeGoal: (id: string) => void;
+  // Goal linking
+  linkTaskToGoal: (taskId: string, goalId: string) => void;
+  unlinkTaskFromGoal: (taskId: string) => void;
+  // Goal selectors
+  getActiveGoals: () => Goal[];
+  getBehindGoals: () => Goal[];
+  getGoalsDueSoon: (days?: number) => Goal[];
+  getGoalProgress: (goalId: string) => number;
+  getGoalStatus: (goalId: string) => GoalDisplayStatus;
   // Events
   addEvent: (event: CalendarEvent) => void;
   updateEvent: (id: string, updates: Partial<CalendarEvent>) => void;
@@ -56,7 +83,7 @@ interface AppContextType {
   exportData: () => string;
   importData: (json: string, mode: 'replace' | 'merge') => void;
   resetData: () => void;
-  // Derived selectors
+  // Task selectors
   getTodayTasks: () => Task[];
   getOverdueTasks: () => Task[];
   getThisWeekCommittedTasks: () => Task[];
@@ -76,7 +103,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setData(prev => fn(prev));
   }, []);
 
-  // Tasks
+  // ── Tasks ──
   const addTask = useCallback((task: Task) => {
     update(d => ({ ...d, tasks: [...d.tasks, task] }));
     toast({ title: 'Task created', description: task.title });
@@ -87,7 +114,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const deleteTask = useCallback((id: string) => {
-    update(d => ({ ...d, tasks: d.tasks.filter(t => t.id !== id) }));
+    update(d => ({
+      ...d,
+      tasks: d.tasks.filter(t => t.id !== id),
+      goals: d.goals.map(g => ({ ...g, linkedTaskIds: g.linkedTaskIds.filter(tid => tid !== id) })),
+    }));
     toast({ title: 'Task deleted' });
   }, [update]);
 
@@ -97,46 +128,92 @@ export function AppProvider({ children }: { children: ReactNode }) {
       tasks: d.tasks.map(t => {
         if (t.id !== id) return t;
         const isDone = t.status === 'done';
-        return {
-          ...t,
-          status: isDone ? 'todo' as const : 'done' as const,
-          completedAt: isDone ? undefined : new Date().toISOString(),
-        };
+        return { ...t, status: isDone ? 'todo' as const : 'done' as const, completedAt: isDone ? undefined : new Date().toISOString() };
       }),
     }));
     const task = data.tasks.find(t => t.id === id);
-    if (task && task.status !== 'done') {
-      toast({ title: 'Task completed! ✓', description: task.title });
-    }
+    if (task && task.status !== 'done') toast({ title: 'Task completed! ✓', description: task.title });
   }, [update, data.tasks]);
 
   const changeTaskStatus = useCallback((id: string, status: Task['status']) => {
     update(d => ({
       ...d,
-      tasks: d.tasks.map(t => {
-        if (t.id !== id) return t;
-        return {
-          ...t,
-          status,
-          completedAt: status === 'done' ? new Date().toISOString() : undefined,
-        };
-      }),
+      tasks: d.tasks.map(t => t.id !== id ? t : { ...t, status, completedAt: status === 'done' ? new Date().toISOString() : undefined }),
     }));
   }, [update]);
 
-  // Goals
+  // ── Goals ──
   const addGoal = useCallback((goal: Goal) => {
     update(d => ({ ...d, goals: [...d.goals, goal] }));
     toast({ title: 'Goal created', description: goal.title });
   }, [update]);
-  const updateGoal = useCallback((id: string, updates: Partial<Goal>) =>
-    update(d => ({ ...d, goals: d.goals.map(g => g.id === id ? { ...g, ...updates } : g) })), [update]);
+
+  const updateGoal = useCallback((id: string, updates: Partial<Goal>) => {
+    update(d => ({ ...d, goals: d.goals.map(g => g.id === id ? { ...g, ...updates, updatedAt: new Date().toISOString() } : g) }));
+  }, [update]);
+
   const deleteGoal = useCallback((id: string) => {
-    update(d => ({ ...d, goals: d.goals.filter(g => g.id !== id) }));
+    update(d => ({
+      ...d,
+      goals: d.goals.filter(g => g.id !== id),
+      tasks: d.tasks.map(t => t.goalId === id ? { ...t, goalId: undefined } : t),
+    }));
     toast({ title: 'Goal deleted' });
   }, [update]);
 
-  // Events
+  const archiveGoal = useCallback((id: string) => {
+    update(d => ({ ...d, goals: d.goals.map(g => g.id === id ? { ...g, status: 'archived' as const, updatedAt: new Date().toISOString() } : g) }));
+    toast({ title: 'Goal archived' });
+  }, [update]);
+
+  const completeGoal = useCallback((id: string) => {
+    update(d => ({ ...d, goals: d.goals.map(g => g.id === id ? { ...g, status: 'completed' as const, updatedAt: new Date().toISOString() } : g) }));
+    toast({ title: 'Goal completed! 🎉' });
+  }, [update]);
+
+  // ── Goal Linking ──
+  const linkTaskToGoal = useCallback((taskId: string, goalId: string) => {
+    update(d => ({
+      ...d,
+      tasks: d.tasks.map(t => t.id === taskId ? { ...t, goalId } : t),
+      goals: d.goals.map(g => g.id === goalId ? { ...g, linkedTaskIds: g.linkedTaskIds.includes(taskId) ? g.linkedTaskIds : [...g.linkedTaskIds, taskId], updatedAt: new Date().toISOString() } : g),
+    }));
+    toast({ title: 'Task linked to goal' });
+  }, [update]);
+
+  const unlinkTaskFromGoal = useCallback((taskId: string) => {
+    update(d => ({
+      ...d,
+      tasks: d.tasks.map(t => t.id === taskId ? { ...t, goalId: undefined } : t),
+      goals: d.goals.map(g => ({ ...g, linkedTaskIds: g.linkedTaskIds.filter(id => id !== taskId), updatedAt: new Date().toISOString() })),
+    }));
+    toast({ title: 'Task unlinked from goal' });
+  }, [update]);
+
+  // ── Goal Selectors ──
+  const getActiveGoals = useCallback(() => data.goals.filter(g => g.status === 'active'), [data.goals]);
+
+  const getBehindGoals = useCallback(() => {
+    return data.goals.filter(g => g.status === 'active' && getGoalDisplayStatus(g, data.tasks) === 'Behind');
+  }, [data.goals, data.tasks]);
+
+  const getGoalsDueSoon = useCallback((days: number = 14) => {
+    return getGoalsDueSoonUtil(data.goals, days);
+  }, [data.goals]);
+
+  const getGoalProgress = useCallback((goalId: string): number => {
+    const goal = data.goals.find(g => g.id === goalId);
+    if (!goal) return 0;
+    return computeGoalProgress(goal, data.tasks);
+  }, [data.goals, data.tasks]);
+
+  const getGoalStatus = useCallback((goalId: string): GoalDisplayStatus => {
+    const goal = data.goals.find(g => g.id === goalId);
+    if (!goal) return 'Not started';
+    return getGoalDisplayStatus(goal, data.tasks);
+  }, [data.goals, data.tasks]);
+
+  // ── Events ──
   const addEvent = useCallback((event: CalendarEvent) => {
     update(d => ({ ...d, events: [...d.events, event] }));
     toast({ title: 'Event created', description: event.title });
@@ -148,71 +225,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast({ title: 'Event deleted' });
   }, [update]);
 
-  // Habits
+  // ── Habits ──
   const addHabit = useCallback((habit: Habit) => {
     update(d => ({ ...d, habits: [...d.habits, habit] }));
     toast({ title: 'Habit created', description: habit.title });
   }, [update]);
   const updateHabit = useCallback((id: string, updates: Partial<Habit>) =>
     update(d => ({ ...d, habits: d.habits.map(h => h.id === id ? { ...h, ...updates } : h) })), [update]);
-  const deleteHabit = useCallback((id: string) => {
-    update(d => ({ ...d, habits: d.habits.filter(h => h.id !== id) }));
-  }, [update]);
+  const deleteHabit = useCallback((id: string) => { update(d => ({ ...d, habits: d.habits.filter(h => h.id !== id) })); }, [update]);
   const logHabit = useCallback((id: string, date: string) => {
-    update(d => ({
-      ...d,
-      habits: d.habits.map(h => h.id === id
-        ? { ...h, logs: h.logs.includes(date) ? h.logs : [...h.logs, date] }
-        : h
-      ),
-    }));
+    update(d => ({ ...d, habits: d.habits.map(h => h.id === id ? { ...h, logs: h.logs.includes(date) ? h.logs : [...h.logs, date] } : h) }));
     toast({ title: 'Habit logged ✓' });
   }, [update]);
 
-  // Weekly Plans
-  const addWeeklyPlan = useCallback((plan: WeeklyPlan) =>
-    update(d => ({ ...d, weeklyPlans: [...d.weeklyPlans, plan] })), [update]);
-  const updateWeeklyPlan = useCallback((id: string, updates: Partial<WeeklyPlan>) =>
-    update(d => ({ ...d, weeklyPlans: d.weeklyPlans.map(p => p.id === id ? { ...p, ...updates } : p) })), [update]);
+  // ── Weekly Plans ──
+  const addWeeklyPlan = useCallback((plan: WeeklyPlan) => update(d => ({ ...d, weeklyPlans: [...d.weeklyPlans, plan] })), [update]);
+  const updateWeeklyPlan = useCallback((id: string, updates: Partial<WeeklyPlan>) => update(d => ({ ...d, weeklyPlans: d.weeklyPlans.map(p => p.id === id ? { ...p, ...updates } : p) })), [update]);
 
   const getOrCreateCurrentWeekPlan = useCallback((): WeeklyPlan => {
     const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
     const existing = data.weeklyPlans.find(p => p.weekStartDate === weekStart);
     if (existing) return existing;
-    const plan: WeeklyPlan = {
-      id: crypto.randomUUID(),
-      weekStartDate: weekStart,
-      committedTaskIds: [],
-      createdAt: new Date().toISOString(),
-    };
-    // We don't call addWeeklyPlan here to avoid side effects during render
-    // Instead return a transient plan - caller should save if needed
-    return plan;
+    return { id: crypto.randomUUID(), weekStartDate: weekStart, committedTaskIds: [], createdAt: new Date().toISOString() };
   }, [data.weeklyPlans]);
 
-  // Pinned Focus
+  // ── Pinned Focus ──
   const setPinnedFocus = useCallback((date: string, taskIds: string[]) => {
-    update(d => ({
-      ...d,
-      pinnedFocus: { ...d.pinnedFocus, [date]: taskIds.slice(0, 3) },
-    }));
+    update(d => ({ ...d, pinnedFocus: { ...d.pinnedFocus, [date]: taskIds.slice(0, 3) } }));
   }, [update]);
+  const getPinnedFocus = useCallback((date: string): string[] => data.pinnedFocus[date] || [], [data.pinnedFocus]);
 
-  const getPinnedFocus = useCallback((date: string): string[] => {
-    return data.pinnedFocus[date] || [];
-  }, [data.pinnedFocus]);
+  // ── Profile ──
+  const updateProfile = useCallback((updates: Partial<UserProfile>) => update(d => ({ ...d, profile: { ...d.profile, ...updates } })), [update]);
 
-  // Profile
-  const updateProfile = useCallback((updates: Partial<UserProfile>) =>
-    update(d => ({ ...d, profile: { ...d.profile, ...updates } })), [update]);
-
-  // Data management
+  // ── Data management ──
   const exportData = useCallback(() => JSON.stringify(data, null, 2), [data]);
   const importData = useCallback((json: string, mode: 'replace' | 'merge') => {
     try {
       const imported = JSON.parse(json) as AppData;
-      if (mode === 'replace') { setData(imported); }
-      else {
+      if (mode === 'replace') { setData(imported); } else {
         update(d => ({
           ...d,
           tasks: [...d.tasks, ...imported.tasks.filter(t => !d.tasks.some(x => x.id === t.id))],
@@ -222,9 +273,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }));
       }
       toast({ title: `Data ${mode === 'replace' ? 'replaced' : 'merged'} successfully` });
-    } catch {
-      toast({ title: 'Import failed', description: 'Invalid JSON file', variant: 'destructive' });
-    }
+    } catch { toast({ title: 'Import failed', variant: 'destructive' }); }
   }, [update]);
 
   const resetData = useCallback(() => {
@@ -233,15 +282,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast({ title: 'Data reset to defaults' });
   }, []);
 
-  // Derived selectors
+  // ── Task Selectors ──
   const getTodayTasks = useCallback((): Task[] => {
     const todayStr = format(new Date(), 'yyyy-MM-dd');
-    return data.tasks.filter(t =>
-      t.status !== 'done' && (
-        (t.dueDate && t.dueDate === todayStr) ||
-        t.status === 'doing'
-      )
-    );
+    return data.tasks.filter(t => t.status !== 'done' && ((t.dueDate && t.dueDate === todayStr) || t.status === 'doing'));
   }, [data.tasks]);
 
   const getOverdueTasks = useCallback((): Task[] => {
@@ -250,9 +294,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [data.tasks]);
 
   const getThisWeekCommittedTasks = useCallback((): Task[] => {
-    const plan = data.weeklyPlans.find(p =>
-      p.weekStartDate === format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
-    );
+    const plan = data.weeklyPlans.find(p => p.weekStartDate === format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
     if (!plan) return [];
     return data.tasks.filter(t => plan.committedTaskIds.includes(t.id));
   }, [data.tasks, data.weeklyPlans]);
@@ -260,32 +302,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const completionRateThisWeek = useCallback((): number => {
     const ws = startOfWeek(new Date(), { weekStartsOn: 1 });
     const we = endOfWeek(new Date(), { weekStartsOn: 1 });
-    const weekTasks = data.tasks.filter(t =>
-      t.dueDate && isWithinInterval(new Date(t.dueDate), { start: ws, end: we })
-    );
+    const weekTasks = data.tasks.filter(t => t.dueDate && isWithinInterval(new Date(t.dueDate), { start: ws, end: we }));
     if (weekTasks.length === 0) return 0;
-    const done = weekTasks.filter(t => t.status === 'done').length;
-    return Math.round((done / weekTasks.length) * 100);
+    return Math.round((weekTasks.filter(t => t.status === 'done').length / weekTasks.length) * 100);
   }, [data.tasks]);
 
   const tasksCompletedPerDayThisWeek = useCallback((): { date: string; count: number }[] => {
     const ws = startOfWeek(new Date(), { weekStartsOn: 1 });
-    const result: { date: string; count: number }[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(ws);
-      d.setDate(d.getDate() + i);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = addDays(ws, i);
       const dayStr = format(d, 'yyyy-MM-dd');
-      const count = data.tasks.filter(t => t.completedAt && format(new Date(t.completedAt), 'yyyy-MM-dd') === dayStr).length;
-      result.push({ date: format(d, 'EEE'), count });
-    }
-    return result;
+      return { date: format(d, 'EEE'), count: data.tasks.filter(t => t.completedAt && format(new Date(t.completedAt), 'yyyy-MM-dd') === dayStr).length };
+    });
   }, [data.tasks]);
 
   const avgCompletionTime = useCallback((): string => {
     const completed = data.tasks.filter(t => t.completedAt && t.createdAt);
     if (completed.length === 0) return 'N/A';
-    const totalMin = completed.reduce((sum, t) =>
-      sum + differenceInMinutes(new Date(t.completedAt!), new Date(t.createdAt)), 0);
+    const totalMin = completed.reduce((sum, t) => sum + differenceInMinutes(new Date(t.completedAt!), new Date(t.createdAt)), 0);
     const avg = totalMin / completed.length;
     if (avg < 60) return `${Math.round(avg)}m`;
     if (avg < 1440) return `${(avg / 60).toFixed(1)}h`;
@@ -295,7 +329,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       data, addTask, updateTask, deleteTask, toggleTaskDone, changeTaskStatus,
-      addGoal, updateGoal, deleteGoal,
+      addGoal, updateGoal, deleteGoal, archiveGoal, completeGoal,
+      linkTaskToGoal, unlinkTaskFromGoal,
+      getActiveGoals, getBehindGoals, getGoalsDueSoon, getGoalProgress, getGoalStatus,
       addEvent, updateEvent, deleteEvent,
       addHabit, updateHabit, deleteHabit, logHabit,
       addWeeklyPlan, updateWeeklyPlan, getOrCreateCurrentWeekPlan,
