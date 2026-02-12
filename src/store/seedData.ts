@@ -1,4 +1,4 @@
-import { AppData } from '@/types';
+import { AppData, DEFAULT_NOTIFICATION_SETTINGS } from '@/types';
 import { format, subDays, addDays } from 'date-fns';
 
 const today = new Date();
@@ -11,7 +11,7 @@ const fmtDT = (d: Date, h: number, m = 0) => {
 const now = new Date().toISOString();
 
 export const seedData: AppData = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   profile: { name: 'Alex', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, weekStartDay: 'monday' },
   pinnedFocus: { [fmt(today)]: ['t1', 't2'] },
   tasks: [
@@ -51,4 +51,6 @@ export const seedData: AppData = {
   dailyCheckIns: [],
   lifeScoreSnapshots: [],
   weeklyPlans: [],
+  notifications: [],
+  notificationSettings: DEFAULT_NOTIFICATION_SETTINGS,
 };
