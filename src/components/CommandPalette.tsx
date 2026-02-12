@@ -5,16 +5,17 @@ import {
 } from '@/components/ui/command';
 import {
   LayoutDashboard, CheckSquare, Target, CalendarDays,
-  Repeat, BarChart3, ClipboardList, Settings, Plus, Search, Inbox, Bell,
+  Repeat, BarChart3, ClipboardList, Settings, Plus, Search, Inbox, Bell, Sparkles,
 } from 'lucide-react';
 import { useAppContext } from '@/store/AppContext';
 
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenCopilot?: (msg?: string) => void;
 }
 
-export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
+export function CommandPalette({ open, onOpenChange, onOpenCopilot }: CommandPaletteProps) {
   const navigate = useNavigate();
   const { data, addInboxItem } = useAppContext();
   const [captureMode, setCaptureMode] = useState(false);
@@ -56,6 +57,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         {!captureMode && (
           <>
             <CommandGroup heading="Quick Actions">
+              <CommandItem onSelect={() => { onOpenChange(false); setCaptureMode(false); onOpenCopilot?.(); }}>
+                <Sparkles className="mr-2 h-4 w-4" /> Ask Copilot
+              </CommandItem>
               <CommandItem onSelect={() => setCaptureMode(true)}>
                 <Inbox className="mr-2 h-4 w-4" /> Capture to Inbox
               </CommandItem>
