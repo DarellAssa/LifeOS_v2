@@ -20,9 +20,9 @@ export interface Task {
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
-  dueDate?: string; // ISO date only (yyyy-MM-dd)
-  createdAt: string; // ISO datetime
-  completedAt?: string; // ISO datetime
+  dueDate?: string;
+  createdAt: string;
+  completedAt?: string;
   tags: string[];
   project?: string;
   estimatedMinutes?: number;
@@ -34,28 +34,29 @@ export interface Task {
 export type GoalCategory = 'health' | 'career' | 'finance' | 'study' | 'personal' | 'custom';
 export type GoalStatus = 'active' | 'completed' | 'archived';
 export type ProgressType = 'manual' | 'linked';
+export type GoalDisplayStatus = 'Not started' | 'On track' | 'Behind' | 'Overdue' | 'Completed';
 
 export interface Milestone {
   id: string;
   title: string;
-  targetDate: string;
-  completed: boolean;
+  date?: string;
+  done: boolean;
 }
 
 export interface Goal {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   category: GoalCategory;
   status: GoalStatus;
   startDate: string;
   targetDate: string;
   progressType: ProgressType;
   progressValue: number;
-  targetMetric: string;
-  currentMetric: string;
   linkedTaskIds: string[];
   milestones: Milestone[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type EventCategory = 'work' | 'personal' | 'study' | 'health' | 'custom';
@@ -79,12 +80,12 @@ export interface Habit {
   title: string;
   frequency: HabitFrequency;
   targetCountPerPeriod: number;
-  logs: string[]; // ISO date strings
+  logs: string[];
 }
 
 export interface WeeklyPlan {
   id: string;
-  weekStartDate: string; // ISO date, Monday
+  weekStartDate: string;
   committedTaskIds: string[];
   createdAt: string;
 }
@@ -96,7 +97,7 @@ export interface UserProfile {
 }
 
 export interface PinnedFocus {
-  [isoDate: string]: string[]; // date -> taskIds (max 3)
+  [isoDate: string]: string[];
 }
 
 export interface AppData {
