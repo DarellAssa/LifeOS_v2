@@ -1,13 +1,17 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
-import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap, CalendarDays } from 'lucide-react';
-import { getHabitStreak, computeGoalProgress, getGoalDisplayStatus } from '@/lib/stats';
-import { format, isToday, addDays, differenceInMinutes, isSameDay } from 'date-fns';
+import { Slider } from '@/components/ui/slider';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap, CalendarDays, Heart, Activity, Brain } from 'lucide-react';
+import { getHabitStreak, computeGoalProgress, getGoalDisplayStatus, computeLifeScore } from '@/lib/stats';
+import { format, addDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { GoalDisplayStatus } from '@/types';
 
@@ -19,15 +23,18 @@ const statusColors: Record<GoalDisplayStatus, string> = {
   'Completed': 'bg-primary/10 text-primary border-primary/20',
 };
 
+const moodLabels = ['😞', '😕', '😐', '🙂', '😊'];
+
 export default function Dashboard() {
   const {
     data, addTask, toggleTaskDone, logHabit,
     getTodayTasks, getOverdueTasks, completionRateThisWeek, tasksCompletedPerDayThisWeek, avgCompletionTime,
     getPinnedFocus, setPinnedFocus, getActiveGoals, getBehindGoals, getGoalsDueSoon: getGoalsDueSoonCtx,
     getAgendaForDay, createFocusBlockFromTask,
+    getCheckInForDate, upsertDailyCheckIn, generateLifeScoreForDate, getLifeScoreForDate,
   } = useAppContext();
   const navigate = useNavigate();
-  const { tasks, goals, events, habits, focusBlocks } = data;
+  const { tasks, goals, habits } = data;
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayTasks = getTodayTasks();
@@ -108,11 +115,135 @@ export default function Dashboard() {
   const hour = now.getHours();
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
 
+  // ── Check-in & Life Score ──
+  const todayCheckIn = getCheckInForDate(todayStr);
+  const [checkInOpen, setCheckInOpen] = useState(false);
+  const [ciStep, setCiStep] = useState(1);
+  const [ciMood, setCiMood] = useState(todayCheckIn?.mood ?? 3);
+  const [ciEnergy, setCiEnergy] = useState(todayCheckIn?.energy ?? 3);
+  const [ciFocus, setCiFocus] = useState(todayCheckIn?.focus ?? 3);
+  const [ciHighlights, setCiHighlights] = useState(todayCheckIn?.highlights ?? '');
+  const [ciBlockers, setCiBlockers] = useState(todayCheckIn?.blockers ?? '');
+  const [ciGratitude, setCiGratitude] = useState(todayCheckIn?.gratitude ?? '');
+
+  // Auto-generate life score on first dashboard load per day
+  const todayScore = getLifeScoreForDate(todayStr);
+  useEffect(() => {
+    if (!todayScore) {
+      generateLifeScoreForDate(todayStr);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayStr]);
+
+  const currentScore = todayScore || { score: 0, breakdown: { tasks: 0, focus: 0, habits: 0, goals: 0 } };
+
+  const handleCheckInSave = () => {
+    upsertDailyCheckIn(todayStr, { mood: ciMood, energy: ciEnergy, focus: ciFocus, highlights: ciHighlights || undefined, blockers: ciBlockers || undefined, gratitude: ciGratitude || undefined });
+    generateLifeScoreForDate(todayStr);
+    setCheckInOpen(false);
+    setCiStep(1);
+  };
+
+  const openCheckIn = (editing?: boolean) => {
+    if (editing && todayCheckIn) {
+      setCiMood(todayCheckIn.mood);
+      setCiEnergy(todayCheckIn.energy);
+      setCiFocus(todayCheckIn.focus);
+      setCiHighlights(todayCheckIn.highlights ?? '');
+      setCiBlockers(todayCheckIn.blockers ?? '');
+      setCiGratitude(todayCheckIn.gratitude ?? '');
+    }
+    setCiStep(1);
+    setCheckInOpen(true);
+  };
+
+  // Score recommendations
+  const recommendations = useMemo(() => {
+    const recs: { text: string; action: string; route: string }[] = [];
+    if (overdue.length > 0) recs.push({ text: 'Schedule an overdue task', action: 'Fix', route: '/tasks?tab=overdue' });
+    const plannedBlocks = data.focusBlocks.filter(fb => fb.status === 'planned' && format(new Date(fb.startDateTime), 'yyyy-MM-dd') === todayStr);
+    if (plannedBlocks.length > 0) recs.push({ text: 'Complete a planned focus block', action: 'Go', route: '/calendar' });
+    const activeHabits = habits.filter(h => (h as any).status !== 'archived');
+    const unloggedHabits = activeHabits.filter(h => h.frequency === 'daily' && !h.logs.includes(todayStr));
+    if (unloggedHabits.length > 0) recs.push({ text: `Log "${unloggedHabits[0].title}"`, action: 'Log', route: '/habits' });
+    return recs.slice(0, 3);
+  }, [overdue, data.focusBlocks, habits, todayStr]);
+
+  // Top habit streaks
+  const topHabitStreaks = useMemo(() => {
+    const active = habits.filter(h => (h as any).status !== 'archived');
+    return [...active].sort((a, b) => getHabitStreak(b) - getHabitStreak(a)).slice(0, 3);
+  }, [habits]);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Good {greeting}, {data.profile.name}</h1>
         <p className="text-muted-foreground text-sm mt-1">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+      </div>
+
+      {/* Daily Check-in + Life Score row */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Heart className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold">Daily Check-in</span>
+              </div>
+              {todayCheckIn ? (
+                <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => openCheckIn(true)}>Edit</Button>
+              ) : (
+                <Button size="sm" className="text-xs h-7" onClick={() => openCheckIn()}>Do check-in (2 min)</Button>
+              )}
+            </div>
+            {todayCheckIn ? (
+              <div className="flex items-center gap-4 mt-2">
+                <div className="text-center"><span className="text-lg">{moodLabels[todayCheckIn.mood - 1]}</span><p className="text-[10px] text-muted-foreground">Mood</p></div>
+                <div className="text-center"><span className="text-lg font-bold">{todayCheckIn.energy}</span><p className="text-[10px] text-muted-foreground">Energy</p></div>
+                <div className="text-center"><span className="text-lg font-bold">{todayCheckIn.focus}</span><p className="text-[10px] text-muted-foreground">Focus</p></div>
+                {todayCheckIn.highlights && <p className="text-xs text-muted-foreground flex-1 truncate ml-2">{todayCheckIn.highlights}</p>}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">Take 2 minutes to reflect on your day.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold">Life Score</span>
+              </div>
+              <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => generateLifeScoreForDate(todayStr)}>Refresh</Button>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-3xl font-bold">{currentScore.score}</div>
+              <div className="flex-1 space-y-1.5">
+                {(['tasks', 'focus', 'habits', 'goals'] as const).map(key => (
+                  <div key={key} className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground w-10 capitalize">{key}</span>
+                    <Progress value={currentScore.breakdown[key]} className="h-1.5 flex-1" />
+                    <span className="text-[10px] font-medium w-6 text-right">{currentScore.breakdown[key]}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {recommendations.length > 0 && (
+              <div className="mt-3 space-y-1">
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Improve your score</p>
+                {recommendations.map((r, i) => (
+                  <button key={i} onClick={() => navigate(r.route)} className="flex items-center justify-between w-full text-xs rounded-md border border-border p-2 hover:bg-muted/30 transition-colors">
+                    <span>{r.text}</span>
+                    <Badge variant="secondary" className="text-[8px]">{r.action}</Badge>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Quick Add */}
@@ -195,7 +326,6 @@ export default function Dashboard() {
               );
             })}
             {todayAgenda.length > 6 && <p className="text-xs text-muted-foreground text-center">+{todayAgenda.length - 6} more</p>}
-            {/* Next free window */}
             <div className="rounded-md border border-dashed border-border p-2.5 text-xs text-muted-foreground">
               Next free: <span className="font-medium text-foreground">{nextFree}</span>
             </div>
@@ -293,12 +423,17 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Habits */}
+        {/* Habit Streaks */}
         <Card className="md:col-span-2">
-          <CardHeader className="pb-3"><CardTitle className="text-base font-semibold flex items-center gap-2"><Flame className="h-4 w-4 text-primary" /> Habits</CardTitle></CardHeader>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2"><Flame className="h-4 w-4 text-primary" /> Habits</CardTitle>
+              <Button size="sm" variant="ghost" onClick={() => navigate('/habits')} className="text-xs">View all <ArrowRight className="h-3 w-3 ml-1" /></Button>
+            </div>
+          </CardHeader>
           <CardContent>
             <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3">
-              {habits.map(h => {
+              {topHabitStreaks.map(h => {
                 const loggedToday = h.logs.includes(todayStr);
                 const streak = getHabitStreak(h);
                 return (
@@ -309,10 +444,73 @@ export default function Dashboard() {
                   </button>
                 );
               })}
+              {habits.filter(h => (h as any).status !== 'archived').length === 0 && <p className="text-sm text-muted-foreground col-span-4">No habits yet. <button onClick={() => navigate('/habits')} className="text-primary underline">Create one</button></p>}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Check-in Modal */}
+      <Dialog open={checkInOpen} onOpenChange={setCheckInOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Daily Check-in</DialogTitle></DialogHeader>
+          {ciStep === 1 && (
+            <div className="space-y-5">
+              <div>
+                <Label className="text-sm mb-2 block">Mood {moodLabels[ciMood - 1]}</Label>
+                <Slider value={[ciMood]} onValueChange={v => setCiMood(v[0])} min={1} max={5} step={1} />
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1"><span>Low</span><span>High</span></div>
+              </div>
+              <div>
+                <Label className="text-sm mb-2 block">Energy: {ciEnergy}/5</Label>
+                <Slider value={[ciEnergy]} onValueChange={v => setCiEnergy(v[0])} min={1} max={5} step={1} />
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1"><span>Low</span><span>High</span></div>
+              </div>
+              <div>
+                <Label className="text-sm mb-2 block">Focus: {ciFocus}/5</Label>
+                <Slider value={[ciFocus]} onValueChange={v => setCiFocus(v[0])} min={1} max={5} step={1} />
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1"><span>Low</span><span>High</span></div>
+              </div>
+              <Button className="w-full" onClick={() => setCiStep(2)}>Next</Button>
+            </div>
+          )}
+          {ciStep === 2 && (
+            <div className="space-y-4">
+              <div><Label>Highlights</Label><Textarea value={ciHighlights} onChange={e => setCiHighlights(e.target.value)} rows={2} placeholder="What went well today?" /></div>
+              <div><Label>Blockers</Label><Textarea value={ciBlockers} onChange={e => setCiBlockers(e.target.value)} rows={2} placeholder="What held you back?" /></div>
+              <div><Label>Gratitude (optional)</Label><Textarea value={ciGratitude} onChange={e => setCiGratitude(e.target.value)} rows={2} placeholder="What are you grateful for?" /></div>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setCiStep(1)} className="flex-1">Back</Button>
+                <Button onClick={() => setCiStep(3)} className="flex-1">Next</Button>
+              </div>
+            </div>
+          )}
+          {ciStep === 3 && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground mb-2">Today's Life Score</p>
+                <p className="text-4xl font-bold">{computeLifeScore(data, todayStr).score}</p>
+              </div>
+              <div className="space-y-1.5">
+                {(['tasks', 'focus', 'habits', 'goals'] as const).map(key => {
+                  const val = computeLifeScore(data, todayStr).breakdown[key];
+                  return (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-12 capitalize">{key}</span>
+                      <Progress value={val} className="h-1.5 flex-1" />
+                      <span className="text-xs font-medium w-6 text-right">{val}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Mood: {moodLabels[ciMood - 1]} · Energy: {ciEnergy}/5 · Focus: {ciFocus}/5
+              </p>
+              <Button className="w-full" onClick={handleCheckInSave}>Save Check-in</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

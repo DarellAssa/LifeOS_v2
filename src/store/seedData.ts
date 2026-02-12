@@ -11,7 +11,7 @@ const fmtDT = (d: Date, h: number, m = 0) => {
 const now = new Date().toISOString();
 
 export const seedData: AppData = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   profile: { name: 'Alex', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, weekStartDay: 'monday' },
   pinnedFocus: { [fmt(today)]: ['t1', 't2'] },
   tasks: [
@@ -43,10 +43,12 @@ export const seedData: AppData = {
     { id: 'fb2', title: 'Bug fix session', startDateTime: fmtDT(today, 14, 0), endDateTime: fmtDT(today, 15, 0), linkedTaskId: 't8', status: 'planned', notes: '', createdAt: now, updatedAt: now },
   ],
   habits: [
-    { id: 'h1', title: 'Meditate 10 min', frequency: 'daily', targetCountPerPeriod: 7, logs: [fmt(subDays(today, 1)), fmt(subDays(today, 2)), fmt(subDays(today, 3)), fmt(subDays(today, 5))] },
-    { id: 'h2', title: 'Read 30 min', frequency: 'daily', targetCountPerPeriod: 7, logs: [fmt(subDays(today, 1)), fmt(subDays(today, 2)), fmt(subDays(today, 4))] },
-    { id: 'h3', title: 'Exercise', frequency: 'weekly', targetCountPerPeriod: 4, logs: [fmt(subDays(today, 1)), fmt(subDays(today, 3)), fmt(subDays(today, 6))] },
-    { id: 'h4', title: 'Journal', frequency: 'daily', targetCountPerPeriod: 7, logs: [fmt(subDays(today, 1)), fmt(subDays(today, 2)), fmt(subDays(today, 3)), fmt(subDays(today, 4)), fmt(subDays(today, 5))] },
+    { id: 'h1', title: 'Meditate 10 min', description: 'Daily mindfulness session', frequency: 'daily', targetCountPerPeriod: 7, category: 'health', logs: [fmt(subDays(today, 1)), fmt(subDays(today, 2)), fmt(subDays(today, 3)), fmt(subDays(today, 5))], createdAt: subDays(today, 14).toISOString(), updatedAt: now, status: 'active' },
+    { id: 'h2', title: 'Read 30 min', description: 'Daily reading habit', frequency: 'daily', targetCountPerPeriod: 7, category: 'study', logs: [fmt(subDays(today, 1)), fmt(subDays(today, 2)), fmt(subDays(today, 4))], createdAt: subDays(today, 14).toISOString(), updatedAt: now, status: 'active' },
+    { id: 'h3', title: 'Exercise', description: '4x per week workout', frequency: 'weekly', targetCountPerPeriod: 4, category: 'health', logs: [fmt(subDays(today, 1)), fmt(subDays(today, 3)), fmt(subDays(today, 6))], createdAt: subDays(today, 14).toISOString(), updatedAt: now, status: 'active' },
+    { id: 'h4', title: 'Journal', description: 'Daily reflection', frequency: 'daily', targetCountPerPeriod: 7, category: 'personal', logs: [fmt(subDays(today, 1)), fmt(subDays(today, 2)), fmt(subDays(today, 3)), fmt(subDays(today, 4)), fmt(subDays(today, 5))], createdAt: subDays(today, 14).toISOString(), updatedAt: now, status: 'active' },
   ],
+  dailyCheckIns: [],
+  lifeScoreSnapshots: [],
   weeklyPlans: [],
 };

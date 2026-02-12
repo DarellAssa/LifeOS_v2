@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, WeeklyPlan, UserProfile, GoalDisplayStatus } from '@/types';
+import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, DailyCheckIn, LifeScoreSnapshot, WeeklyPlan, UserProfile, GoalDisplayStatus } from '@/types';
 import { seedData } from './seedData';
 import { toast } from '@/hooks/use-toast';
 import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays, addMinutes, isSameDay, parseISO } from 'date-fns';
-import { computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon as getGoalsDueSoonUtil } from '@/lib/stats';
+import { computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon as getGoalsDueSoonUtil, computeLifeScore } from '@/lib/stats';
 
 const STORAGE_KEY = 'lifeos-data';
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 function loadData(): AppData {
   try {
@@ -14,12 +14,14 @@ function loadData(): AppData {
     if (raw) {
       const parsed = JSON.parse(raw) as AppData;
       if (parsed.schemaVersion === SCHEMA_VERSION) return parsed;
-      // Migration from v2/v3 to v4
+      // Migration from v2/v3/v4 to v5
       if (parsed.schemaVersion >= 2) {
         return {
           ...parsed,
           schemaVersion: SCHEMA_VERSION,
           focusBlocks: (parsed as any).focusBlocks || [],
+          dailyCheckIns: (parsed as any).dailyCheckIns || [],
+          lifeScoreSnapshots: (parsed as any).lifeScoreSnapshots || [],
           goals: parsed.goals.map((g: any) => ({
             ...g,
             createdAt: g.createdAt || new Date().toISOString(),
@@ -36,6 +38,14 @@ function loadData(): AppData {
               e.recurring === 'weekly' ? { type: 'weekly', interval: 1 } :
               e.recurring === 'monthly' ? { type: 'monthly', interval: 1 } :
               typeof e.recurring === 'object' ? e.recurring : null,
+          })),
+          habits: parsed.habits.map((h: any) => ({
+            ...h,
+            category: h.category || 'personal',
+            description: h.description || '',
+            createdAt: h.createdAt || new Date().toISOString(),
+            updatedAt: h.updatedAt || new Date().toISOString(),
+            status: h.status || 'active',
           })),
         };
       }
@@ -88,7 +98,16 @@ interface AppContextType {
   addHabit: (habit: Habit) => void;
   updateHabit: (id: string, updates: Partial<Habit>) => void;
   deleteHabit: (id: string) => void;
+  archiveHabit: (id: string) => void;
   logHabit: (id: string, date: string) => void;
+  toggleHabitLog: (id: string, date: string) => void;
+  // Daily Check-ins
+  upsertDailyCheckIn: (dateISO: string, payload: Omit<DailyCheckIn, 'id' | 'date' | 'createdAt' | 'updatedAt'>) => void;
+  deleteDailyCheckIn: (dateISO: string) => void;
+  getCheckInForDate: (dateISO: string) => DailyCheckIn | undefined;
+  // Life Score
+  generateLifeScoreForDate: (dateISO: string) => LifeScoreSnapshot;
+  getLifeScoreForDate: (dateISO: string) => LifeScoreSnapshot | undefined;
   // Plans
   addWeeklyPlan: (plan: WeeklyPlan) => void;
   updateWeeklyPlan: (id: string, updates: Partial<WeeklyPlan>) => void;
@@ -325,12 +344,70 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast({ title: 'Habit created', description: habit.title });
   }, [update]);
   const updateHabit = useCallback((id: string, updates: Partial<Habit>) =>
-    update(d => ({ ...d, habits: d.habits.map(h => h.id === id ? { ...h, ...updates } : h) })), [update]);
-  const deleteHabit = useCallback((id: string) => { update(d => ({ ...d, habits: d.habits.filter(h => h.id !== id) })); }, [update]);
+    update(d => ({ ...d, habits: d.habits.map(h => h.id === id ? { ...h, ...updates, updatedAt: new Date().toISOString() } : h) })), [update]);
+  const deleteHabit = useCallback((id: string) => { update(d => ({ ...d, habits: d.habits.filter(h => h.id !== id) })); toast({ title: 'Habit deleted' }); }, [update]);
+  const archiveHabit = useCallback((id: string) => {
+    update(d => ({ ...d, habits: d.habits.map(h => h.id === id ? { ...h, status: 'archived' as const, updatedAt: new Date().toISOString() } : h) }));
+    toast({ title: 'Habit archived' });
+  }, [update]);
   const logHabit = useCallback((id: string, date: string) => {
-    update(d => ({ ...d, habits: d.habits.map(h => h.id === id ? { ...h, logs: h.logs.includes(date) ? h.logs : [...h.logs, date] } : h) }));
+    update(d => ({ ...d, habits: d.habits.map(h => h.id === id ? { ...h, logs: h.logs.includes(date) ? h.logs : [...h.logs, date], updatedAt: new Date().toISOString() } : h) }));
     toast({ title: 'Habit logged ✓' });
   }, [update]);
+  const toggleHabitLog = useCallback((id: string, date: string) => {
+    update(d => ({
+      ...d,
+      habits: d.habits.map(h => {
+        if (h.id !== id) return h;
+        const logs = h.logs.includes(date) ? h.logs.filter(l => l !== date) : [...h.logs, date];
+        return { ...h, logs, updatedAt: new Date().toISOString() };
+      }),
+    }));
+  }, [update]);
+
+  // ── Daily Check-ins ──
+  const upsertDailyCheckIn = useCallback((dateISO: string, payload: Omit<DailyCheckIn, 'id' | 'date' | 'createdAt' | 'updatedAt'>) => {
+    update(d => {
+      const existing = d.dailyCheckIns.find(c => c.date === dateISO);
+      if (existing) {
+        return { ...d, dailyCheckIns: d.dailyCheckIns.map(c => c.date === dateISO ? { ...c, ...payload, updatedAt: new Date().toISOString() } : c) };
+      }
+      const newCheckIn: DailyCheckIn = { id: crypto.randomUUID(), date: dateISO, ...payload, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      return { ...d, dailyCheckIns: [...d.dailyCheckIns, newCheckIn] };
+    });
+    toast({ title: 'Check-in saved ✓' });
+  }, [update]);
+
+  const deleteDailyCheckIn = useCallback((dateISO: string) => {
+    update(d => ({ ...d, dailyCheckIns: d.dailyCheckIns.filter(c => c.date !== dateISO) }));
+    toast({ title: 'Check-in deleted' });
+  }, [update]);
+
+  const getCheckInForDate = useCallback((dateISO: string): DailyCheckIn | undefined => {
+    return data.dailyCheckIns.find(c => c.date === dateISO);
+  }, [data.dailyCheckIns]);
+
+  // ── Life Score ──
+  const generateLifeScoreForDate = useCallback((dateISO: string): LifeScoreSnapshot => {
+    const { score, breakdown } = computeLifeScore(data, dateISO);
+    const existing = data.lifeScoreSnapshots.find(s => s.date === dateISO);
+    const snapshot: LifeScoreSnapshot = {
+      id: existing?.id || crypto.randomUUID(),
+      date: dateISO,
+      score,
+      breakdown,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+    };
+    update(d => {
+      const filtered = d.lifeScoreSnapshots.filter(s => s.date !== dateISO);
+      return { ...d, lifeScoreSnapshots: [...filtered, snapshot] };
+    });
+    return snapshot;
+  }, [data, update]);
+
+  const getLifeScoreForDate = useCallback((dateISO: string): LifeScoreSnapshot | undefined => {
+    return data.lifeScoreSnapshots.find(s => s.date === dateISO);
+  }, [data.lifeScoreSnapshots]);
 
   // ── Weekly Plans ──
   const addWeeklyPlan = useCallback((plan: WeeklyPlan) => update(d => ({ ...d, weeklyPlans: [...d.weeklyPlans, plan] })), [update]);
@@ -357,7 +434,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const importData = useCallback((json: string, mode: 'replace' | 'merge') => {
     try {
       const imported = JSON.parse(json) as AppData;
-      if (mode === 'replace') { setData({ ...imported, schemaVersion: SCHEMA_VERSION, focusBlocks: imported.focusBlocks || [] }); } else {
+      if (mode === 'replace') { setData({ ...imported, schemaVersion: SCHEMA_VERSION, focusBlocks: imported.focusBlocks || [], dailyCheckIns: imported.dailyCheckIns || [], lifeScoreSnapshots: imported.lifeScoreSnapshots || [] }); } else {
         update(d => ({
           ...d,
           tasks: [...d.tasks, ...imported.tasks.filter(t => !d.tasks.some(x => x.id === t.id))],
@@ -365,6 +442,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           events: [...d.events, ...imported.events.filter(e => !d.events.some(x => x.id === e.id))],
           habits: [...d.habits, ...imported.habits.filter(h => !d.habits.some(x => x.id === h.id))],
           focusBlocks: [...d.focusBlocks, ...(imported.focusBlocks || []).filter(fb => !d.focusBlocks.some(x => x.id === fb.id))],
+          dailyCheckIns: [...d.dailyCheckIns, ...(imported.dailyCheckIns || []).filter(c => !d.dailyCheckIns.some(x => x.date === c.date))],
+          lifeScoreSnapshots: [...d.lifeScoreSnapshots, ...(imported.lifeScoreSnapshots || []).filter(s => !d.lifeScoreSnapshots.some(x => x.date === s.date))],
         }));
       }
       toast({ title: `Data ${mode === 'replace' ? 'replaced' : 'merged'} successfully` });
@@ -466,7 +545,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       getActiveGoals, getBehindGoals, getGoalsDueSoon, getGoalProgress, getGoalStatus,
       addEvent, updateEvent, deleteEvent,
       addFocusBlock, updateFocusBlock, deleteFocusBlock, markFocusBlockCompleted, markFocusBlockSkipped, createFocusBlockFromTask,
-      addHabit, updateHabit, deleteHabit, logHabit,
+      addHabit, updateHabit, deleteHabit, archiveHabit, logHabit, toggleHabitLog,
+      upsertDailyCheckIn, deleteDailyCheckIn, getCheckInForDate,
+      generateLifeScoreForDate, getLifeScoreForDate,
       addWeeklyPlan, updateWeeklyPlan, getOrCreateCurrentWeekPlan,
       setPinnedFocus, getPinnedFocus,
       updateProfile, exportData, importData, resetData,
