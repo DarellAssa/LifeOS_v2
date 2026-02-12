@@ -10,14 +10,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { Plus, Trash2, ChevronRight } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Goal, GoalCategory, GoalStatus } from '@/types';
 import { getGoalOnTrack } from '@/lib/stats';
 
 const categoryColors: Record<GoalCategory, string> = {
-  health: 'bg-green-500/10 text-green-600', career: 'bg-blue-500/10 text-blue-600',
-  finance: 'bg-yellow-500/10 text-yellow-600', study: 'bg-purple-500/10 text-purple-600',
-  personal: 'bg-pink-500/10 text-pink-600', custom: 'bg-muted text-muted-foreground',
+  health: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
+  career: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
+  finance: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
+  study: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
+  personal: 'bg-pink-500/10 text-pink-700 dark:text-pink-400 border-pink-500/20',
+  custom: 'bg-muted text-muted-foreground border-border',
 };
 
 function GoalForm({ onSave, onClose, initial }: { onSave: (g: Omit<Goal, 'id'>) => void; onClose: () => void; initial?: Goal }) {
@@ -42,7 +45,7 @@ function GoalForm({ onSave, onClose, initial }: { onSave: (g: Omit<Goal, 'id'>) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div><Label>Title</Label><Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Goal title" autoFocus /></div>
+      <div><Label>Title</Label><Input value={title} onChange={e => setTitle(e.target.value)} autoFocus /></div>
       <div><Label>Description</Label><Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} /></div>
       <div className="grid grid-cols-2 gap-4">
         <div><Label>Category</Label>
@@ -106,7 +109,7 @@ export default function Goals() {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-semibold text-sm">{goal.title}</p>
-                    <Badge className={`text-[10px] mt-1 ${categoryColors[goal.category]}`}>{goal.category}</Badge>
+                    <Badge className={`text-[10px] mt-1 border ${categoryColors[goal.category]}`}>{goal.category}</Badge>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={onTrack ? 'default' : 'destructive'} className="text-[10px]">{onTrack ? 'On track' : 'Behind'}</Badge>
@@ -120,9 +123,6 @@ export default function Goals() {
                   </div>
                   <Progress value={goal.progressValue} className="h-1.5" />
                 </div>
-                {goal.milestones.length > 0 && (
-                  <p className="text-xs text-muted-foreground">{goal.milestones.filter(m => m.completed).length}/{goal.milestones.length} milestones</p>
-                )}
               </CardContent>
             </Card>
           );

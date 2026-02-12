@@ -5,16 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, Upload, Trash2, HelpCircle } from 'lucide-react';
+import { Download, Upload, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 export default function SettingsPage() {
   const { data, updateProfile, exportData, importData, resetData } = useAppContext();
   const [name, setName] = useState(data.profile.name);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
 
   const handleExport = () => {
     const json = exportData();
@@ -33,10 +31,7 @@ export default function SettingsPage() {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        importData(ev.target?.result as string, mode);
-        toast({ title: `Data ${mode === 'replace' ? 'replaced' : 'merged'} successfully` });
-      };
+      reader.onload = (ev) => { importData(ev.target?.result as string, mode); };
       reader.readAsText(file);
     };
     input.click();
@@ -54,7 +49,7 @@ export default function SettingsPage() {
             <CardContent className="p-6 space-y-4">
               <div><Label>Name</Label>
                 <Input value={name} onChange={e => setName(e.target.value)}
-                  onBlur={() => updateProfile({ name })} />
+                  onBlur={() => { updateProfile({ name }); toast({ title: 'Profile updated' }); }} />
               </div>
               <div><Label>Week starts on</Label>
                 <Select value={data.profile.weekStartDay} onValueChange={v => updateProfile({ weekStartDay: v as 'monday' | 'sunday' })}>
@@ -95,9 +90,7 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <p className="text-sm text-destructive">This will delete all your data and restore defaults. Are you sure?</p>
                   <div className="flex gap-2">
-                    <Button variant="destructive" onClick={() => { resetData(); setConfirmReset(false); toast({ title: 'Data reset to defaults' }); }}>
-                      Yes, reset everything
-                    </Button>
+                    <Button variant="destructive" onClick={() => { resetData(); setConfirmReset(false); }}>Yes, reset everything</Button>
                     <Button variant="ghost" onClick={() => setConfirmReset(false)}>Cancel</Button>
                   </div>
                 </div>
@@ -111,34 +104,13 @@ export default function SettingsPage() {
             <CardContent className="p-6 space-y-4 text-sm">
               <h3 className="font-semibold text-base">How to use LifeOS</h3>
               <div className="space-y-3">
-                <div>
-                  <p className="font-medium">📋 Tasks</p>
-                  <p className="text-muted-foreground">Create tasks, set priorities and due dates. Use the star icon to pin tasks as "Today's Focus". Switch between List, Kanban, Week, and Overdue views.</p>
-                </div>
-                <div>
-                  <p className="font-medium">🎯 Goals</p>
-                  <p className="text-muted-foreground">Set long-term goals with target dates. Track progress manually. Link tasks to goals to break them into actionable steps.</p>
-                </div>
-                <div>
-                  <p className="font-medium">📅 Calendar</p>
-                  <p className="text-muted-foreground">Add events with start/end times. View in Day, Week, or Month mode. Events appear on your Dashboard's daily schedule.</p>
-                </div>
-                <div>
-                  <p className="font-medium">🔁 Habits</p>
-                  <p className="text-muted-foreground">Create daily or weekly habits. Log completions with one click. Build streaks and track weekly adherence.</p>
-                </div>
-                <div>
-                  <p className="font-medium">📊 Analytics</p>
-                  <p className="text-muted-foreground">View task completion trends, goal progress distribution, and habit adherence — all computed from your real data.</p>
-                </div>
-                <div>
-                  <p className="font-medium">📝 Planning</p>
-                  <p className="text-muted-foreground">Use Weekly Review to see last week's results and commit to tasks for the upcoming week. Monthly Goals shows your active focus areas.</p>
-                </div>
-                <div>
-                  <p className="font-medium">⌘K Command Palette</p>
-                  <p className="text-muted-foreground">Press ⌘K (or Ctrl+K) to quickly navigate, search, or create tasks/events/goals from anywhere.</p>
-                </div>
+                <div><p className="font-medium">📋 Tasks</p><p className="text-muted-foreground">Create tasks with priorities and due dates. Use List, Kanban (drag & drop), Week, and Overdue views. Pin tasks as "Today's Focus" from the Dashboard.</p></div>
+                <div><p className="font-medium">🎯 Goals</p><p className="text-muted-foreground">Set long-term goals with target dates and track progress. Link tasks to goals.</p></div>
+                <div><p className="font-medium">📅 Calendar</p><p className="text-muted-foreground">Add events and view in Day, Week, or Month mode.</p></div>
+                <div><p className="font-medium">🔁 Habits</p><p className="text-muted-foreground">Create daily/weekly habits. Log completions and build streaks.</p></div>
+                <div><p className="font-medium">📊 Analytics</p><p className="text-muted-foreground">View task completion trends, overdue trends, and top tags — all from your real data.</p></div>
+                <div><p className="font-medium">📝 Weekly Planning</p><p className="text-muted-foreground">Commit up to 10 tasks per week. View scoreboard and carry over overdue tasks.</p></div>
+                <div><p className="font-medium">⌘K Command Palette</p><p className="text-muted-foreground">Press ⌘K (or Ctrl+K) to quickly navigate or create tasks/events/goals.</p></div>
               </div>
             </CardContent>
           </Card>
