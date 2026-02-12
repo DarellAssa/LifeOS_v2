@@ -1,31 +1,34 @@
 // LifeOS Core Types
 
 export type TaskStatus = 'todo' | 'doing' | 'done';
-export type TaskPriority = 'low' | 'medium' | 'high';
-export type RecurringOption = 'daily' | 'weekly' | 'monthly' | null;
+export type TaskPriority = 'low' | 'med' | 'high';
 
 export interface Subtask {
   id: string;
   title: string;
-  completed: boolean;
+  done: boolean;
+}
+
+export interface RecurringConfig {
+  type: 'daily' | 'weekly' | 'monthly';
+  interval: number;
 }
 
 export interface Task {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   status: TaskStatus;
   priority: TaskPriority;
-  dueDate: string | null;
-  createdAt: string;
-  completedAt: string | null;
+  dueDate?: string; // ISO date only (yyyy-MM-dd)
+  createdAt: string; // ISO datetime
+  completedAt?: string; // ISO datetime
   tags: string[];
-  project: string;
-  estimatedMinutes: number | null;
-  recurring: RecurringOption;
-  goalId: string | null;
+  project?: string;
+  estimatedMinutes?: number;
+  goalId?: string;
   subtasks: Subtask[];
-  isTodayFocus: boolean;
+  recurring?: RecurringConfig;
 }
 
 export type GoalCategory = 'health' | 'career' | 'finance' | 'study' | 'personal' | 'custom';
@@ -56,6 +59,7 @@ export interface Goal {
 }
 
 export type EventCategory = 'work' | 'personal' | 'study' | 'health' | 'custom';
+export type RecurringOption = 'daily' | 'weekly' | 'monthly' | null;
 
 export interface CalendarEvent {
   id: string;
@@ -80,7 +84,7 @@ export interface Habit {
 
 export interface WeeklyPlan {
   id: string;
-  weekStartDate: string;
+  weekStartDate: string; // ISO date, Monday
   committedTaskIds: string[];
   createdAt: string;
 }
@@ -91,6 +95,10 @@ export interface UserProfile {
   weekStartDay: 'monday' | 'sunday';
 }
 
+export interface PinnedFocus {
+  [isoDate: string]: string[]; // date -> taskIds (max 3)
+}
+
 export interface AppData {
   schemaVersion: number;
   tasks: Task[];
@@ -99,4 +107,5 @@ export interface AppData {
   habits: Habit[];
   weeklyPlans: WeeklyPlan[];
   profile: UserProfile;
+  pinnedFocus: PinnedFocus;
 }

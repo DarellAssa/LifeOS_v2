@@ -10,50 +10,77 @@ const fmtDT = (d: Date, h: number, m = 0) => {
 };
 
 export const seedData: AppData = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   profile: {
     name: 'Alex',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     weekStartDay: 'monday',
   },
+  pinnedFocus: {
+    [fmt(today)]: ['t1', 't2'],
+  },
   tasks: [
     {
       id: 't1', title: 'Write project proposal', description: 'Draft the Q1 project proposal for the team', status: 'doing', priority: 'high',
-      dueDate: fmt(today), createdAt: subDays(today, 3).toISOString(), completedAt: null,
-      tags: ['work'], project: 'Q1 Planning', estimatedMinutes: 60, recurring: null, goalId: 'g1', subtasks: [
-        { id: 'st1', title: 'Outline key objectives', completed: true },
-        { id: 'st2', title: 'Define milestones', completed: false },
-      ], isTodayFocus: true,
+      dueDate: fmt(today), createdAt: subDays(today, 3).toISOString(), completedAt: undefined,
+      tags: ['work'], project: 'Q1 Planning', estimatedMinutes: 60, goalId: 'g1',
+      subtasks: [
+        { id: 'st1', title: 'Outline key objectives', done: true },
+        { id: 'st2', title: 'Define milestones', done: false },
+      ],
     },
     {
-      id: 't2', title: 'Morning run — 5K', description: '', status: 'todo', priority: 'medium',
-      dueDate: fmt(today), createdAt: subDays(today, 1).toISOString(), completedAt: null,
-      tags: ['health'], project: '', estimatedMinutes: 30, recurring: 'daily', goalId: 'g2', subtasks: [], isTodayFocus: true,
+      id: 't2', title: 'Morning run — 5K', description: '', status: 'todo', priority: 'med',
+      dueDate: fmt(today), createdAt: subDays(today, 1).toISOString(),
+      tags: ['health'], project: undefined, estimatedMinutes: 30, goalId: 'g2',
+      subtasks: [], recurring: { type: 'daily', interval: 1 },
     },
     {
-      id: 't3', title: 'Read chapter 4 of Deep Work', description: '', status: 'todo', priority: 'low',
-      dueDate: fmt(addDays(today, 1)), createdAt: subDays(today, 2).toISOString(), completedAt: null,
-      tags: ['study'], project: 'Reading', estimatedMinutes: 45, recurring: null, goalId: 'g3', subtasks: [], isTodayFocus: false,
+      id: 't3', title: 'Read chapter 4 of Deep Work', status: 'todo', priority: 'low',
+      dueDate: fmt(addDays(today, 1)), createdAt: subDays(today, 2).toISOString(),
+      tags: ['study'], project: 'Reading', estimatedMinutes: 45, goalId: 'g3',
+      subtasks: [],
     },
     {
       id: 't4', title: 'Review budget spreadsheet', description: 'Monthly finances review', status: 'todo', priority: 'high',
-      dueDate: fmt(subDays(today, 1)), createdAt: subDays(today, 5).toISOString(), completedAt: null,
-      tags: ['finance'], project: '', estimatedMinutes: 20, recurring: 'monthly', goalId: 'g4', subtasks: [], isTodayFocus: false,
+      dueDate: fmt(subDays(today, 1)), createdAt: subDays(today, 5).toISOString(),
+      tags: ['finance'], estimatedMinutes: 20, subtasks: [],
+      recurring: { type: 'monthly', interval: 1 },
     },
     {
-      id: 't5', title: 'Prepare presentation slides', description: '', status: 'done', priority: 'high',
+      id: 't5', title: 'Prepare presentation slides', status: 'done', priority: 'high',
       dueDate: fmt(subDays(today, 2)), createdAt: subDays(today, 7).toISOString(), completedAt: subDays(today, 2).toISOString(),
-      tags: ['work'], project: 'Q1 Planning', estimatedMinutes: 90, recurring: null, goalId: 'g1', subtasks: [], isTodayFocus: false,
+      tags: ['work'], project: 'Q1 Planning', estimatedMinutes: 90, goalId: 'g1', subtasks: [],
     },
     {
-      id: 't6', title: 'Grocery shopping', description: 'Weekly groceries', status: 'done', priority: 'medium',
+      id: 't6', title: 'Grocery shopping', description: 'Weekly groceries', status: 'done', priority: 'med',
       dueDate: fmt(subDays(today, 1)), createdAt: subDays(today, 2).toISOString(), completedAt: subDays(today, 1).toISOString(),
-      tags: ['personal'], project: '', estimatedMinutes: 40, recurring: 'weekly', goalId: null, subtasks: [], isTodayFocus: false,
+      tags: ['personal'], estimatedMinutes: 40, subtasks: [],
+      recurring: { type: 'weekly', interval: 1 },
     },
     {
-      id: 't7', title: 'Update portfolio website', description: 'Add recent projects', status: 'todo', priority: 'medium',
-      dueDate: fmt(addDays(today, 3)), createdAt: subDays(today, 1).toISOString(), completedAt: null,
-      tags: ['career'], project: 'Personal Brand', estimatedMinutes: 120, recurring: null, goalId: 'g1', subtasks: [], isTodayFocus: true,
+      id: 't7', title: 'Update portfolio website', description: 'Add recent projects', status: 'todo', priority: 'med',
+      dueDate: fmt(addDays(today, 3)), createdAt: subDays(today, 1).toISOString(),
+      tags: ['career'], project: 'Personal Brand', estimatedMinutes: 120, goalId: 'g1', subtasks: [],
+    },
+    {
+      id: 't8', title: 'Fix login page bug', status: 'doing', priority: 'high',
+      dueDate: fmt(today), createdAt: subDays(today, 1).toISOString(),
+      tags: ['work', 'urgent'], project: 'Q1 Planning', subtasks: [
+        { id: 'st3', title: 'Reproduce the issue', done: true },
+        { id: 'st4', title: 'Write fix', done: false },
+        { id: 'st5', title: 'Test on staging', done: false },
+      ],
+    },
+    {
+      id: 't9', title: 'Plan team offsite agenda', status: 'todo', priority: 'low',
+      dueDate: fmt(addDays(today, 5)), createdAt: subDays(today, 1).toISOString(),
+      tags: ['work'], project: 'Q1 Planning', subtasks: [],
+    },
+    {
+      id: 't10', title: 'Submit expense report', status: 'todo', priority: 'med',
+      dueDate: fmt(subDays(today, 3)), createdAt: subDays(today, 6).toISOString(),
+      tags: ['finance', 'work'], subtasks: [],
     },
   ],
   goals: [

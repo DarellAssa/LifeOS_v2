@@ -1,24 +1,25 @@
 import { Task, Goal, Habit } from '@/types';
-import { isToday, isBefore, startOfDay, startOfWeek, endOfWeek, isWithinInterval, differenceInDays, format } from 'date-fns';
+import { isBefore, startOfDay, startOfWeek, endOfWeek, isWithinInterval, differenceInDays, format } from 'date-fns';
 
 export function getOverdueTasks(tasks: Task[]): Task[] {
-  const now = startOfDay(new Date());
-  return tasks.filter(t => t.status !== 'done' && t.dueDate && isBefore(new Date(t.dueDate), now));
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  return tasks.filter(t => t.status !== 'done' && t.dueDate && t.dueDate < todayStr);
 }
 
 export function getTasksDoneToday(tasks: Task[]): Task[] {
-  return tasks.filter(t => t.completedAt && isToday(new Date(t.completedAt)));
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  return tasks.filter(t => t.completedAt && format(new Date(t.completedAt), 'yyyy-MM-dd') === todayStr);
 }
 
 export function getTasksDueToday(tasks: Task[]): Task[] {
-  return tasks.filter(t => t.dueDate && isToday(new Date(t.dueDate)) && t.status !== 'done');
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  return tasks.filter(t => t.dueDate === todayStr && t.status !== 'done');
 }
 
 export function getWeeklyCompletionRate(tasks: Task[]): number {
-  const now = new Date();
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
-  const weekTasks = tasks.filter(t => t.dueDate && isWithinInterval(new Date(t.dueDate), { start: weekStart, end: weekEnd }));
+  const ws = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const we = endOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekTasks = tasks.filter(t => t.dueDate && isWithinInterval(new Date(t.dueDate), { start: ws, end: we }));
   if (weekTasks.length === 0) return 0;
   const done = weekTasks.filter(t => t.status === 'done').length;
   return Math.round((done / weekTasks.length) * 100);
@@ -48,46 +49,32 @@ export function getAverageGoalProgress(goals: Goal[]): number {
 
 export function getHabitStreak(habit: Habit): number {
   if (habit.logs.length === 0) return 0;
-  const sorted = [...habit.logs].sort().reverse();
+  const sorted = [...new Set(habit.logs)].sort().reverse();
   let streak = 0;
   let checkDate = startOfDay(new Date());
+  const checkStr = format(checkDate, 'yyyy-MM-dd');
+
   for (const log of sorted) {
-    const logDate = format(new Date(log), 'yyyy-MM-dd');
     const expected = format(checkDate, 'yyyy-MM-dd');
-    if (logDate === expected) {
+    if (log === expected) {
       streak++;
       checkDate = new Date(checkDate);
       checkDate.setDate(checkDate.getDate() - 1);
-    } else if (logDate < expected) {
-      // Allow skipping today if not logged yet
-      if (streak === 0) {
+    } else if (streak === 0 && log < expected) {
+      // Allow skipping today
+      checkDate.setDate(checkDate.getDate() - 1);
+      if (format(checkDate, 'yyyy-MM-dd') === log) {
+        streak++;
         checkDate.setDate(checkDate.getDate() - 1);
-        if (format(checkDate, 'yyyy-MM-dd') === logDate) {
-          streak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        } else break;
       } else break;
-    }
+    } else break;
   }
   return streak;
 }
 
 export function getHabitWeeklyAdherence(habit: Habit): number {
-  const now = new Date();
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
-  const weekLogs = habit.logs.filter(l => isWithinInterval(new Date(l), { start: weekStart, end: weekEnd }));
+  const ws = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const we = endOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekLogs = habit.logs.filter(l => isWithinInterval(new Date(l), { start: ws, end: we }));
   return Math.round((weekLogs.length / habit.targetCountPerPeriod) * 100);
-}
-
-export function getLongestStreak(habit: Habit): number {
-  if (habit.logs.length === 0) return 0;
-  const sorted = [...new Set(habit.logs)].sort();
-  let longest = 1, current = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    const diff = differenceInDays(new Date(sorted[i]), new Date(sorted[i - 1]));
-    if (diff === 1) { current++; longest = Math.max(longest, current); }
-    else current = 1;
-  }
-  return longest;
 }
