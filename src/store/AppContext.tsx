@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { AppData, Task, Goal, CalendarEvent, Habit, WeeklyPlan, UserProfile, GoalDisplayStatus } from '@/types';
+import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, WeeklyPlan, UserProfile, GoalDisplayStatus } from '@/types';
 import { seedData } from './seedData';
 import { toast } from '@/hooks/use-toast';
-import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays } from 'date-fns';
+import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays, addMinutes, isSameDay, parseISO } from 'date-fns';
 import { computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon as getGoalsDueSoonUtil } from '@/lib/stats';
 
 const STORAGE_KEY = 'lifeos-data';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 function loadData(): AppData {
   try {
@@ -14,11 +14,12 @@ function loadData(): AppData {
     if (raw) {
       const parsed = JSON.parse(raw) as AppData;
       if (parsed.schemaVersion === SCHEMA_VERSION) return parsed;
-      // Migration: add missing fields for older schema
-      if (parsed.schemaVersion === 2) {
+      // Migration from v2/v3 to v4
+      if (parsed.schemaVersion >= 2) {
         return {
           ...parsed,
           schemaVersion: SCHEMA_VERSION,
+          focusBlocks: (parsed as any).focusBlocks || [],
           goals: parsed.goals.map((g: any) => ({
             ...g,
             createdAt: g.createdAt || new Date().toISOString(),
@@ -26,6 +27,15 @@ function loadData(): AppData {
             milestones: (g.milestones || []).map((m: any) => ({
               id: m.id, title: m.title, date: m.date || m.targetDate, done: m.done ?? m.completed ?? false,
             })),
+          })),
+          events: parsed.events.map((e: any) => ({
+            ...e,
+            createdAt: e.createdAt || new Date().toISOString(),
+            updatedAt: e.updatedAt || new Date().toISOString(),
+            recurring: e.recurring === 'daily' ? { type: 'daily', interval: 1 } :
+              e.recurring === 'weekly' ? { type: 'weekly', interval: 1 } :
+              e.recurring === 'monthly' ? { type: 'monthly', interval: 1 } :
+              typeof e.recurring === 'object' ? e.recurring : null,
           })),
         };
       }
@@ -46,6 +56,8 @@ interface AppContextType {
   deleteTask: (id: string) => void;
   toggleTaskDone: (id: string) => void;
   changeTaskStatus: (id: string, status: Task['status']) => void;
+  scheduleTask: (taskId: string, startDateTime: string, endDateTime: string) => void;
+  unscheduleTask: (taskId: string) => void;
   // Goals
   addGoal: (goal: Goal) => void;
   updateGoal: (id: string, updates: Partial<Goal>) => void;
@@ -65,6 +77,13 @@ interface AppContextType {
   addEvent: (event: CalendarEvent) => void;
   updateEvent: (id: string, updates: Partial<CalendarEvent>) => void;
   deleteEvent: (id: string) => void;
+  // Focus Blocks
+  addFocusBlock: (block: FocusBlock) => void;
+  updateFocusBlock: (id: string, updates: Partial<FocusBlock>) => void;
+  deleteFocusBlock: (id: string) => void;
+  markFocusBlockCompleted: (id: string) => void;
+  markFocusBlockSkipped: (id: string) => void;
+  createFocusBlockFromTask: (taskId: string, startDateTime: string, durationMinutes: number) => void;
   // Habits
   addHabit: (habit: Habit) => void;
   updateHabit: (id: string, updates: Partial<Habit>) => void;
@@ -90,7 +109,27 @@ interface AppContextType {
   completionRateThisWeek: () => number;
   tasksCompletedPerDayThisWeek: () => { date: string; count: number }[];
   avgCompletionTime: () => string;
+  // Calendar selectors
+  getEventsForDay: (dateISO: string) => CalendarEvent[];
+  getBlocksForDay: (dateISO: string) => FocusBlock[];
+  getAgendaForDay: (dateISO: string) => AgendaItem[];
+  getPlannedFocusMinutes: (startDate: string, endDate: string) => number;
+  getCompletedFocusMinutes: (startDate: string, endDate: string) => number;
 }
+
+export type AgendaItem = {
+  type: 'event' | 'focus';
+  id: string;
+  title: string;
+  startDateTime: string;
+  endDateTime: string;
+  category?: string;
+  status?: string;
+  linkedTaskId?: string;
+  linkedGoalId?: string;
+  location?: string;
+  notes?: string;
+};
 
 const AppContext = createContext<AppContextType | null>(null);
 
@@ -118,6 +157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...d,
       tasks: d.tasks.filter(t => t.id !== id),
       goals: d.goals.map(g => ({ ...g, linkedTaskIds: g.linkedTaskIds.filter(tid => tid !== id) })),
+      focusBlocks: d.focusBlocks.map(fb => fb.linkedTaskId === id ? { ...fb, linkedTaskId: undefined } : fb),
     }));
     toast({ title: 'Task deleted' });
   }, [update]);
@@ -142,6 +182,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, [update]);
 
+  const scheduleTask = useCallback((taskId: string, startDateTime: string, endDateTime: string) => {
+    update(d => ({ ...d, tasks: d.tasks.map(t => t.id === taskId ? { ...t, scheduledStart: startDateTime, scheduledEnd: endDateTime } : t) }));
+    toast({ title: 'Task scheduled' });
+  }, [update]);
+
+  const unscheduleTask = useCallback((taskId: string) => {
+    update(d => ({ ...d, tasks: d.tasks.map(t => t.id === taskId ? { ...t, scheduledStart: undefined, scheduledEnd: undefined } : t) }));
+    toast({ title: 'Task unscheduled' });
+  }, [update]);
+
   // ── Goals ──
   const addGoal = useCallback((goal: Goal) => {
     update(d => ({ ...d, goals: [...d.goals, goal] }));
@@ -157,6 +207,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...d,
       goals: d.goals.filter(g => g.id !== id),
       tasks: d.tasks.map(t => t.goalId === id ? { ...t, goalId: undefined } : t),
+      focusBlocks: d.focusBlocks.map(fb => fb.linkedGoalId === id ? { ...fb, linkedGoalId: undefined } : fb),
     }));
     toast({ title: 'Goal deleted' });
   }, [update]);
@@ -215,15 +266,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Events ──
   const addEvent = useCallback((event: CalendarEvent) => {
-    update(d => ({ ...d, events: [...d.events, event] }));
+    update(d => ({ ...d, events: [...d.events, { ...event, createdAt: event.createdAt || new Date().toISOString(), updatedAt: event.updatedAt || new Date().toISOString() }] }));
     toast({ title: 'Event created', description: event.title });
   }, [update]);
   const updateEvent = useCallback((id: string, updates: Partial<CalendarEvent>) =>
-    update(d => ({ ...d, events: d.events.map(e => e.id === id ? { ...e, ...updates } : e) })), [update]);
+    update(d => ({ ...d, events: d.events.map(e => e.id === id ? { ...e, ...updates, updatedAt: new Date().toISOString() } : e) })), [update]);
   const deleteEvent = useCallback((id: string) => {
     update(d => ({ ...d, events: d.events.filter(e => e.id !== id) }));
     toast({ title: 'Event deleted' });
   }, [update]);
+
+  // ── Focus Blocks ──
+  const addFocusBlock = useCallback((block: FocusBlock) => {
+    update(d => ({ ...d, focusBlocks: [...d.focusBlocks, block] }));
+    toast({ title: 'Focus block created', description: block.title });
+  }, [update]);
+
+  const updateFocusBlock = useCallback((id: string, updates: Partial<FocusBlock>) => {
+    update(d => ({ ...d, focusBlocks: d.focusBlocks.map(fb => fb.id === id ? { ...fb, ...updates, updatedAt: new Date().toISOString() } : fb) }));
+  }, [update]);
+
+  const deleteFocusBlock = useCallback((id: string) => {
+    update(d => ({ ...d, focusBlocks: d.focusBlocks.filter(fb => fb.id !== id) }));
+    toast({ title: 'Focus block deleted' });
+  }, [update]);
+
+  const markFocusBlockCompleted = useCallback((id: string) => {
+    update(d => ({ ...d, focusBlocks: d.focusBlocks.map(fb => fb.id === id ? { ...fb, status: 'completed' as const, updatedAt: new Date().toISOString() } : fb) }));
+    toast({ title: 'Focus block completed ✓' });
+  }, [update]);
+
+  const markFocusBlockSkipped = useCallback((id: string) => {
+    update(d => ({ ...d, focusBlocks: d.focusBlocks.map(fb => fb.id === id ? { ...fb, status: 'skipped' as const, updatedAt: new Date().toISOString() } : fb) }));
+    toast({ title: 'Focus block skipped' });
+  }, [update]);
+
+  const createFocusBlockFromTask = useCallback((taskId: string, startDateTime: string, durationMinutes: number) => {
+    const task = data.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const endDateTime = addMinutes(new Date(startDateTime), durationMinutes).toISOString();
+    const block: FocusBlock = {
+      id: crypto.randomUUID(), title: task.title,
+      startDateTime, endDateTime,
+      linkedTaskId: taskId, linkedGoalId: task.goalId,
+      status: 'planned', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+    update(d => ({
+      ...d,
+      focusBlocks: [...d.focusBlocks, block],
+      tasks: d.tasks.map(t => t.id === taskId ? { ...t, scheduledStart: startDateTime, scheduledEnd: endDateTime } : t),
+    }));
+    toast({ title: 'Focus block created from task', description: task.title });
+  }, [update, data.tasks]);
 
   // ── Habits ──
   const addHabit = useCallback((habit: Habit) => {
@@ -263,13 +357,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const importData = useCallback((json: string, mode: 'replace' | 'merge') => {
     try {
       const imported = JSON.parse(json) as AppData;
-      if (mode === 'replace') { setData(imported); } else {
+      if (mode === 'replace') { setData({ ...imported, schemaVersion: SCHEMA_VERSION, focusBlocks: imported.focusBlocks || [] }); } else {
         update(d => ({
           ...d,
           tasks: [...d.tasks, ...imported.tasks.filter(t => !d.tasks.some(x => x.id === t.id))],
           goals: [...d.goals, ...imported.goals.filter(g => !d.goals.some(x => x.id === g.id))],
           events: [...d.events, ...imported.events.filter(e => !d.events.some(x => x.id === e.id))],
           habits: [...d.habits, ...imported.habits.filter(h => !d.habits.some(x => x.id === h.id))],
+          focusBlocks: [...d.focusBlocks, ...(imported.focusBlocks || []).filter(fb => !d.focusBlocks.some(x => x.id === fb.id))],
         }));
       }
       toast({ title: `Data ${mode === 'replace' ? 'replaced' : 'merged'} successfully` });
@@ -326,19 +421,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return `${(avg / 1440).toFixed(1)}d`;
   }, [data.tasks]);
 
+  // ── Calendar Selectors ──
+  const getEventsForDay = useCallback((dateISO: string): CalendarEvent[] => {
+    const day = parseISO(dateISO);
+    return data.events.filter(e => isSameDay(new Date(e.startDateTime), day));
+  }, [data.events]);
+
+  const getBlocksForDay = useCallback((dateISO: string): FocusBlock[] => {
+    const day = parseISO(dateISO);
+    return data.focusBlocks.filter(fb => isSameDay(new Date(fb.startDateTime), day));
+  }, [data.focusBlocks]);
+
+  const getAgendaForDay = useCallback((dateISO: string): AgendaItem[] => {
+    const events: AgendaItem[] = getEventsForDay(dateISO).map(e => ({
+      type: 'event', id: e.id, title: e.title, startDateTime: e.startDateTime, endDateTime: e.endDateTime,
+      category: e.category, location: e.location, notes: e.notes,
+    }));
+    const blocks: AgendaItem[] = getBlocksForDay(dateISO).map(fb => ({
+      type: 'focus', id: fb.id, title: fb.title, startDateTime: fb.startDateTime, endDateTime: fb.endDateTime,
+      status: fb.status, linkedTaskId: fb.linkedTaskId, linkedGoalId: fb.linkedGoalId, notes: fb.notes,
+    }));
+    return [...events, ...blocks].sort((a, b) => a.startDateTime.localeCompare(b.startDateTime));
+  }, [getEventsForDay, getBlocksForDay]);
+
+  const getPlannedFocusMinutes = useCallback((startDate: string, endDate: string): number => {
+    const s = new Date(startDate); const e = new Date(endDate);
+    return data.focusBlocks
+      .filter(fb => { const d = new Date(fb.startDateTime); return d >= s && d <= e; })
+      .reduce((sum, fb) => sum + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
+  }, [data.focusBlocks]);
+
+  const getCompletedFocusMinutes = useCallback((startDate: string, endDate: string): number => {
+    const s = new Date(startDate); const e = new Date(endDate);
+    return data.focusBlocks
+      .filter(fb => fb.status === 'completed' && new Date(fb.startDateTime) >= s && new Date(fb.startDateTime) <= e)
+      .reduce((sum, fb) => sum + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
+  }, [data.focusBlocks]);
+
   return (
     <AppContext.Provider value={{
-      data, addTask, updateTask, deleteTask, toggleTaskDone, changeTaskStatus,
+      data, addTask, updateTask, deleteTask, toggleTaskDone, changeTaskStatus, scheduleTask, unscheduleTask,
       addGoal, updateGoal, deleteGoal, archiveGoal, completeGoal,
       linkTaskToGoal, unlinkTaskFromGoal,
       getActiveGoals, getBehindGoals, getGoalsDueSoon, getGoalProgress, getGoalStatus,
       addEvent, updateEvent, deleteEvent,
+      addFocusBlock, updateFocusBlock, deleteFocusBlock, markFocusBlockCompleted, markFocusBlockSkipped, createFocusBlockFromTask,
       addHabit, updateHabit, deleteHabit, logHabit,
       addWeeklyPlan, updateWeeklyPlan, getOrCreateCurrentWeekPlan,
       setPinnedFocus, getPinnedFocus,
       updateProfile, exportData, importData, resetData,
       getTodayTasks, getOverdueTasks, getThisWeekCommittedTasks,
       completionRateThisWeek, tasksCompletedPerDayThisWeek, avgCompletionTime,
+      getEventsForDay, getBlocksForDay, getAgendaForDay, getPlannedFocusMinutes, getCompletedFocusMinutes,
     }}>
       {children}
     </AppContext.Provider>

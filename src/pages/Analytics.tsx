@@ -2,20 +2,21 @@ import { useState, useMemo } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
-import { format, subDays, startOfWeek, endOfWeek, startOfMonth, isWithinInterval, addDays, eachWeekOfInterval } from 'date-fns';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { format, subDays, startOfWeek, endOfWeek, startOfMonth, isWithinInterval, addDays, eachWeekOfInterval, differenceInMinutes } from 'date-fns';
 import { computeGoalProgress, getGoalDisplayStatus } from '@/lib/stats';
-import { Target } from 'lucide-react';
+import { Target, Zap } from 'lucide-react';
 
 type TimeRange = 'week' | 'month';
 
 export default function Analytics() {
-  const { data, avgCompletionTime } = useAppContext();
+  const { data, avgCompletionTime, getPlannedFocusMinutes, getCompletedFocusMinutes } = useAppContext();
   const [range, setRange] = useState<TimeRange>('week');
 
   const now = new Date();
   const todayStr = format(now, 'yyyy-MM-dd');
   const rangeStart = range === 'week' ? startOfWeek(now, { weekStartsOn: 1 }) : startOfMonth(now);
+  const rangeEnd = range === 'week' ? endOfWeek(now, { weekStartsOn: 1 }) : now;
 
   // Task completion over time
   const completionData = useMemo(() => {
@@ -96,11 +97,49 @@ export default function Analytics() {
     return { onTrack, behind, overdue };
   }, [activeGoals, data.tasks]);
 
-  // Correlation insight
   const linkedGoals = activeGoals.filter(g => g.progressType === 'linked');
   const manualGoals = activeGoals.filter(g => g.progressType === 'manual');
   const linkedAvg = linkedGoals.length > 0 ? Math.round(linkedGoals.reduce((s, g) => s + computeGoalProgress(g, data.tasks), 0) / linkedGoals.length) : 0;
   const manualAvg = manualGoals.length > 0 ? Math.round(manualGoals.reduce((s, g) => s + computeGoalProgress(g, data.tasks), 0) / manualGoals.length) : 0;
+
+  // ── Focus Block Analytics ──
+  const rangeStartISO = rangeStart.toISOString();
+  const rangeEndISO = rangeEnd.toISOString();
+  const plannedMins = getPlannedFocusMinutes(rangeStartISO, rangeEndISO);
+  const completedMins = getCompletedFocusMinutes(rangeStartISO, rangeEndISO);
+  const focusRate = plannedMins > 0 ? Math.round((completedMins / plannedMins) * 100) : 0;
+  const focusBlocksCompleted = data.focusBlocks.filter(fb => fb.status === 'completed' && new Date(fb.startDateTime) >= rangeStart && new Date(fb.startDateTime) <= rangeEnd).length;
+
+  const focusPerDay = useMemo(() => {
+    if (range === 'week') {
+      const ws = startOfWeek(now, { weekStartsOn: 1 });
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = addDays(ws, i);
+        const dayStr = format(d, 'yyyy-MM-dd');
+        const dayBlocks = data.focusBlocks.filter(fb => format(new Date(fb.startDateTime), 'yyyy-MM-dd') === dayStr);
+        const planned = dayBlocks.reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
+        const completed = dayBlocks.filter(fb => fb.status === 'completed').reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
+        return { date: format(d, 'EEE'), planned, completed };
+      });
+    }
+    const weeks = eachWeekOfInterval({ start: subDays(now, 28), end: now }, { weekStartsOn: 1 });
+    return weeks.map(ws => {
+      const we = addDays(ws, 6);
+      const wBlocks = data.focusBlocks.filter(fb => isWithinInterval(new Date(fb.startDateTime), { start: ws, end: we }));
+      const planned = wBlocks.reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
+      const completed = wBlocks.filter(fb => fb.status === 'completed').reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
+      return { date: format(ws, 'MMM d'), planned, completed };
+    });
+  }, [data.focusBlocks, range]);
+
+  // Most scheduled category
+  const topCategory = useMemo(() => {
+    const counts: Record<string, number> = {};
+    data.events.filter(e => new Date(e.startDateTime) >= rangeStart && new Date(e.startDateTime) <= rangeEnd)
+      .forEach(e => { counts[e.category] = (counts[e.category] || 0) + 1; });
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return sorted[0]?.[0] || 'N/A';
+  }, [data.events, rangeStart, rangeEnd]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -131,7 +170,47 @@ export default function Analytics() {
           <CardContent><ResponsiveContainer width="100%" height={200}><BarChart data={overdueData}><CartesianGrid strokeDasharray="3 3" className="stroke-border" /><XAxis dataKey="date" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} tick={{ fontSize: 10 }} /><Tooltip contentStyle={{ fontSize: 12 }} /><Bar dataKey="overdue" fill="hsl(var(--destructive))" radius={[3, 3, 0, 0]} /></BarChart></ResponsiveContainer></CardContent>
         </Card>
 
-        {/* Goal Progress Distribution */}
+        {/* Focus Analytics */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Zap className="h-4 w-4" /> Focus Analytics</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-lg border border-border p-3 text-center">
+                <p className="text-xl font-bold">{plannedMins}m</p>
+                <p className="text-[10px] text-muted-foreground">Planned focus</p>
+              </div>
+              <div className="rounded-lg border border-border p-3 text-center">
+                <p className="text-xl font-bold">{completedMins}m</p>
+                <p className="text-[10px] text-muted-foreground">Completed focus</p>
+              </div>
+              <div className="rounded-lg border border-border p-3 text-center">
+                <p className="text-xl font-bold">{focusRate}%</p>
+                <p className="text-[10px] text-muted-foreground">Completion rate</p>
+              </div>
+              <div className="rounded-lg border border-border p-3 text-center">
+                <p className="text-xl font-bold">{focusBlocksCompleted}</p>
+                <p className="text-[10px] text-muted-foreground">Blocks completed</p>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={focusPerDay}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                <Tooltip contentStyle={{ fontSize: 12 }} />
+                <Bar dataKey="planned" fill="hsl(var(--muted-foreground))" radius={[3, 3, 0, 0]} name="Planned (min)" />
+                <Bar dataKey="completed" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} name="Completed (min)" />
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="mt-3 rounded-lg border border-border p-3 text-sm space-y-1">
+              <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Insights</p>
+              <p>You planned <strong>{plannedMins}</strong> minutes of focus and completed <strong>{completedMins}</strong> minutes.</p>
+              <p>Your most scheduled event category is <strong className="capitalize">{topCategory}</strong>.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Goal Analytics */}
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Target className="h-4 w-4" /> Goal Progress Distribution</CardTitle></CardHeader>
           <CardContent>
@@ -143,7 +222,6 @@ export default function Analytics() {
           </CardContent>
         </Card>
 
-        {/* Goal Status Counts + Insight */}
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Goal Status</CardTitle></CardHeader>
           <CardContent className="space-y-4">
