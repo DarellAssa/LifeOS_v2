@@ -11,7 +11,7 @@ const fmtDT = (d: Date, h: number, m = 0) => {
 const now = new Date().toISOString();
 
 export const seedData: AppData = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   profile: { name: 'Alex', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, weekStartDay: 'monday' },
   pinnedFocus: { [fmt(today)]: ['t1', 't2'] },
   tasks: [
@@ -33,10 +33,14 @@ export const seedData: AppData = {
     { id: 'g4', title: 'Build 6-month emergency fund', description: 'Save enough to cover 6 months of expenses', category: 'finance', status: 'active', startDate: fmt(subDays(today, 90)), targetDate: fmt(addDays(today, 180)), progressType: 'manual', progressValue: 45, linkedTaskIds: ['t4'], milestones: [{ id: 'm4', title: 'Save first $5,000', date: fmt(subDays(today, 30)), done: true }, { id: 'm5', title: 'Reach $10,000', date: fmt(addDays(today, 60)), done: false }], createdAt: subDays(today, 90).toISOString(), updatedAt: now },
   ],
   events: [
-    { id: 'e1', title: 'Team standup', startDateTime: fmtDT(today, 9, 0), endDateTime: fmtDT(today, 9, 30), location: 'Zoom', notes: '', category: 'work', recurring: 'daily' },
-    { id: 'e2', title: 'Lunch with Sarah', startDateTime: fmtDT(today, 12, 30), endDateTime: fmtDT(today, 13, 30), location: 'Cafe Roma', notes: '', category: 'personal', recurring: null },
-    { id: 'e3', title: 'Gym session', startDateTime: fmtDT(today, 17, 30), endDateTime: fmtDT(today, 18, 30), location: 'City Gym', notes: 'Leg day', category: 'health', recurring: 'weekly' },
-    { id: 'e4', title: 'Product review meeting', startDateTime: fmtDT(addDays(today, 1), 14, 0), endDateTime: fmtDT(addDays(today, 1), 15, 0), location: 'Conference Room B', notes: '', category: 'work', recurring: null },
+    { id: 'e1', title: 'Team standup', startDateTime: fmtDT(today, 9, 0), endDateTime: fmtDT(today, 9, 30), location: 'Zoom', notes: '', category: 'work', recurring: { type: 'daily', interval: 1 }, createdAt: now, updatedAt: now },
+    { id: 'e2', title: 'Lunch with Sarah', startDateTime: fmtDT(today, 12, 30), endDateTime: fmtDT(today, 13, 30), location: 'Cafe Roma', notes: '', category: 'personal', recurring: null, createdAt: now, updatedAt: now },
+    { id: 'e3', title: 'Gym session', startDateTime: fmtDT(today, 17, 30), endDateTime: fmtDT(today, 18, 30), location: 'City Gym', notes: 'Leg day', category: 'health', recurring: { type: 'weekly', interval: 1 }, createdAt: now, updatedAt: now },
+    { id: 'e4', title: 'Product review meeting', startDateTime: fmtDT(addDays(today, 1), 14, 0), endDateTime: fmtDT(addDays(today, 1), 15, 0), location: 'Conference Room B', notes: '', category: 'work', recurring: null, createdAt: now, updatedAt: now },
+  ],
+  focusBlocks: [
+    { id: 'fb1', title: 'Deep work: Project proposal', startDateTime: fmtDT(today, 10, 0), endDateTime: fmtDT(today, 11, 30), linkedTaskId: 't1', linkedGoalId: 'g1', status: 'planned', notes: 'Focus on drafting Q1 proposal', createdAt: now, updatedAt: now },
+    { id: 'fb2', title: 'Bug fix session', startDateTime: fmtDT(today, 14, 0), endDateTime: fmtDT(today, 15, 0), linkedTaskId: 't8', status: 'planned', notes: '', createdAt: now, updatedAt: now },
   ],
   habits: [
     { id: 'h1', title: 'Meditate 10 min', frequency: 'daily', targetCountPerPeriod: 7, logs: [fmt(subDays(today, 1)), fmt(subDays(today, 2)), fmt(subDays(today, 3)), fmt(subDays(today, 5))] },

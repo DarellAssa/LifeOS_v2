@@ -1,15 +1,15 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap } from 'lucide-react';
-import { getHabitStreak, getAverageGoalProgress, getOffTrackGoals, computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon } from '@/lib/stats';
-import { format, isToday, addDays, differenceInDays } from 'date-fns';
+import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap, CalendarDays } from 'lucide-react';
+import { getHabitStreak, computeGoalProgress, getGoalDisplayStatus } from '@/lib/stats';
+import { format, isToday, addDays, differenceInMinutes, isSameDay } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
-import { Task, GoalDisplayStatus } from '@/types';
+import { GoalDisplayStatus } from '@/types';
 
 const statusColors: Record<GoalDisplayStatus, string> = {
   'On track': 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
@@ -24,9 +24,10 @@ export default function Dashboard() {
     data, addTask, toggleTaskDone, logHabit,
     getTodayTasks, getOverdueTasks, completionRateThisWeek, tasksCompletedPerDayThisWeek, avgCompletionTime,
     getPinnedFocus, setPinnedFocus, getActiveGoals, getBehindGoals, getGoalsDueSoon: getGoalsDueSoonCtx,
+    getAgendaForDay, createFocusBlockFromTask,
   } = useAppContext();
   const navigate = useNavigate();
-  const { tasks, goals, events, habits } = data;
+  const { tasks, goals, events, habits, focusBlocks } = data;
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayTasks = getTodayTasks();
@@ -34,10 +35,8 @@ export default function Dashboard() {
   const weeklyRate = completionRateThisWeek();
   const perDay = tasksCompletedPerDayThisWeek();
   const avgTime = avgCompletionTime();
-  const offTrackGoals = getOffTrackGoals(goals, tasks);
   const pinnedIds = getPinnedFocus(todayStr);
   const pinnedTasks = tasks.filter(t => pinnedIds.includes(t.id) && t.status !== 'done');
-  const todayEvents = events.filter(e => isToday(new Date(e.startDateTime)));
   const doneToday = tasks.filter(t => t.completedAt && format(new Date(t.completedAt), 'yyyy-MM-dd') === todayStr);
   const weekDone = perDay.reduce((sum, d) => sum + d.count, 0);
 
@@ -45,7 +44,6 @@ export default function Dashboard() {
   const behindGoals = getBehindGoals();
   const dueSoonGoals = getGoalsDueSoonCtx(14);
 
-  // Top 3 goals: behind first, then closest target date
   const topGoals = [...activeGoals].sort((a, b) => {
     const aStatus = getGoalDisplayStatus(a, tasks);
     const bStatus = getGoalDisplayStatus(b, tasks);
@@ -71,7 +69,43 @@ export default function Dashboard() {
     else if (pinnedIds.length < 3) setPinnedFocus(todayStr, [...pinnedIds, taskId]);
   };
 
-  const hour = new Date().getHours();
+  // Today's schedule
+  const todayAgenda = useMemo(() => getAgendaForDay(todayStr), [getAgendaForDay, todayStr]);
+  const now = new Date();
+  const currentItem = todayAgenda.find(item => new Date(item.startDateTime) <= now && new Date(item.endDateTime) > now);
+
+  // Next free window
+  const nextFree = useMemo(() => {
+    if (todayAgenda.length === 0) return '08:00 – 20:00';
+    const nowH = now.getHours() + now.getMinutes() / 60;
+    let cursor = Math.max(nowH, 8);
+    for (const item of todayAgenda) {
+      const s = new Date(item.startDateTime);
+      const sH = s.getHours() + s.getMinutes() / 60;
+      const e = new Date(item.endDateTime);
+      const eH = e.getHours() + e.getMinutes() / 60;
+      if (sH > cursor && sH - cursor >= 0.5) {
+        const startStr = `${Math.floor(cursor).toString().padStart(2, '0')}:${((cursor % 1) * 60).toString().padStart(2, '0')}`;
+        const endStr = `${Math.floor(sH).toString().padStart(2, '0')}:${((sH % 1) * 60).toString().padStart(2, '0')}`;
+        return `${startStr} – ${endStr}`;
+      }
+      cursor = Math.max(cursor, eH);
+    }
+    if (cursor < 20) {
+      const startStr = `${Math.floor(cursor).toString().padStart(2, '0')}:${Math.round((cursor % 1) * 60).toString().padStart(2, '0')}`;
+      return `${startStr} – 20:00`;
+    }
+    return 'No free time today';
+  }, [todayAgenda]);
+
+  // Quick schedule suggestions
+  const schedulableTasks = useMemo(() => {
+    return [...todayTasks, ...overdue.filter(t => !todayTasks.some(tt => tt.id === t.id))]
+      .filter(t => !t.scheduledStart)
+      .slice(0, 3);
+  }, [todayTasks, overdue]);
+
+  const hour = now.getHours();
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
 
   return (
@@ -136,23 +170,62 @@ export default function Dashboard() {
 
         {/* Today's Schedule */}
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base font-semibold flex items-center gap-2"><Clock className="h-4 w-4 text-primary" /> Today's Schedule</CardTitle></CardHeader>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /> Today's Schedule</CardTitle>
+              <Button size="sm" variant="ghost" onClick={() => navigate('/calendar')} className="text-xs">View Calendar <ArrowRight className="h-3 w-3 ml-1" /></Button>
+            </div>
+          </CardHeader>
           <CardContent className="space-y-2">
-            {todayEvents.length === 0 && <p className="text-sm text-muted-foreground">No events today.</p>}
-            {todayEvents.map(event => (
-              <div key={event.id} className="flex items-center gap-3 rounded-md border border-border p-3">
-                <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{event.title}</p>
-                  <p className="text-xs text-muted-foreground">{format(new Date(event.startDateTime), 'h:mm a')} — {format(new Date(event.endDateTime), 'h:mm a')}{event.location && ` · ${event.location}`}</p>
+            {todayAgenda.length === 0 && <p className="text-sm text-muted-foreground">No events or focus blocks today.</p>}
+            {todayAgenda.slice(0, 6).map(item => {
+              const isCurrent = currentItem?.id === item.id;
+              return (
+                <div key={item.id} className={`flex items-center gap-3 rounded-md border p-2.5 text-sm ${isCurrent ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                  <div className={`h-2 w-2 rounded-full shrink-0 ${item.type === 'focus' ? 'bg-primary' : 'bg-blue-500'} ${isCurrent ? 'animate-pulse' : ''}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1">
+                      {item.type === 'focus' && <Zap className="h-3 w-3 text-primary shrink-0" />}
+                      <p className="text-sm font-medium truncate">{item.title}</p>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{format(new Date(item.startDateTime), 'h:mm a')} – {format(new Date(item.endDateTime), 'h:mm a')}</p>
+                  </div>
+                  {isCurrent && <Badge className="text-[8px] bg-primary text-primary-foreground">Now</Badge>}
                 </div>
-              </div>
-            ))}
+              );
+            })}
+            {todayAgenda.length > 6 && <p className="text-xs text-muted-foreground text-center">+{todayAgenda.length - 6} more</p>}
+            {/* Next free window */}
+            <div className="rounded-md border border-dashed border-border p-2.5 text-xs text-muted-foreground">
+              Next free: <span className="font-medium text-foreground">{nextFree}</span>
+            </div>
           </CardContent>
         </Card>
 
+        {/* Quick Schedule */}
+        {schedulableTasks.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold flex items-center gap-2"><Clock className="h-4 w-4 text-primary" /> Quick Schedule</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {schedulableTasks.map(task => (
+                <div key={task.id} className="flex items-center gap-2 text-sm rounded-md border border-border p-2.5">
+                  <span className="flex-1 truncate">{task.title}</span>
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => {
+                    const d = new Date(); d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+                    createFocusBlockFromTask(task.id, d.toISOString(), 30);
+                  }}>30m</Button>
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => {
+                    const d = new Date(); d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+                    createFocusBlockFromTask(task.id, d.toISOString(), 60);
+                  }}>60m</Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Goals Snapshot */}
-        <Card className="md:col-span-2">
+        <Card className={schedulableTasks.length > 0 ? '' : 'md:col-span-2'}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold flex items-center gap-2"><Target className="h-4 w-4 text-primary" /> Goals</CardTitle>
@@ -160,7 +233,6 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {/* Goal KPI cards */}
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="rounded-lg border border-border p-3 text-center">
                 <p className="text-xl font-bold">{activeGoals.length}</p>
@@ -175,7 +247,6 @@ export default function Dashboard() {
                 <p className="text-[10px] text-muted-foreground">Due soon</p>
               </div>
             </div>
-            {/* Top goals */}
             {topGoals.length > 0 && (
               <div className="space-y-2">
                 {topGoals.map(goal => {

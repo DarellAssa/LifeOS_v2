@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Trash2, Search, Edit2, Check, X, AlertCircle, Target } from 'lucide-react';
+import { Plus, Trash2, Search, Edit2, Check, X, AlertCircle, Target, CalendarDays } from 'lucide-react';
 import { Task, TaskStatus, TaskPriority, Subtask } from '@/types';
 import { format, startOfWeek, addDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -33,6 +33,41 @@ function smartSort(tasks: Task[]): Task[] {
     if (a.dueDate && !b.dueDate) return -1;
     return priorityOrder[a.priority] - priorityOrder[b.priority];
   });
+}
+
+// ── Schedule Mini Modal ─────────────────────────────────────────────
+function ScheduleModal({ taskId, taskTitle, onClose }: { taskId: string; taskTitle: string; onClose: () => void }) {
+  const { createFocusBlockFromTask } = useAppContext();
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [duration, setDuration] = useState('30');
+
+  const handleSchedule = () => {
+    createFocusBlockFromTask(taskId, new Date(date).toISOString(), parseInt(duration));
+    onClose();
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Schedule "<strong>{taskTitle}</strong>"</p>
+      <div><Label>Date & Time</Label><Input type="datetime-local" value={date} onChange={e => setDate(e.target.value)} /></div>
+      <div><Label>Duration</Label>
+        <Select value={duration} onValueChange={setDuration}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="15">15 minutes</SelectItem>
+            <SelectItem value="30">30 minutes</SelectItem>
+            <SelectItem value="60">1 hour</SelectItem>
+            <SelectItem value="90">1.5 hours</SelectItem>
+            <SelectItem value="120">2 hours</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSchedule}>Schedule</Button>
+      </div>
+    </div>
+  );
 }
 
 // ── Task Form ───────────────────────────────────────────────────────
@@ -66,6 +101,7 @@ function TaskForm({ onSave, onClose, initial, goals }: {
       dueDate: dueDate || undefined, tags: tags.split(',').map(t => t.trim()).filter(Boolean),
       project: project || undefined, estimatedMinutes: estimatedMinutes ? parseInt(estimatedMinutes) : undefined,
       goalId: goalId !== 'none' ? goalId : undefined, subtasks, recurring: initial?.recurring,
+      scheduledStart: initial?.scheduledStart, scheduledEnd: initial?.scheduledEnd,
     });
     onClose();
   };
@@ -143,10 +179,12 @@ export default function Tasks() {
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterDue, setFilterDue] = useState<string>('all');
   const [filterGoal, setFilterGoal] = useState<string>('all');
+  const [filterScheduled, setFilterScheduled] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | undefined>();
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [scheduleTaskId, setScheduleTaskId] = useState<string | null>(null);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -167,14 +205,15 @@ export default function Tasks() {
     if (filterDue === 'today') t = t.filter(x => x.dueDate === todayStr);
     else if (filterDue === 'week') t = t.filter(x => x.dueDate && x.dueDate >= weekStartStr && x.dueDate <= weekEndStr);
     else if (filterDue === 'overdue') t = t.filter(x => x.status !== 'done' && x.dueDate && x.dueDate < todayStr);
+    if (filterScheduled === 'scheduled') t = t.filter(x => !!x.scheduledStart);
+    else if (filterScheduled === 'unscheduled') t = t.filter(x => !x.scheduledStart);
     return smartSort(t);
-  }, [data.tasks, filterStatus, filterPriority, filterDue, filterGoal, search, todayStr, weekStartStr, weekEndStr]);
+  }, [data.tasks, filterStatus, filterPriority, filterDue, filterGoal, filterScheduled, search, todayStr, weekStartStr, weekEndStr]);
 
   const handleSave = (taskData: Omit<Task, 'id' | 'createdAt' | 'completedAt'>) => {
     if (editingTask) {
       const completedAt = taskData.status === 'done' && editingTask.status !== 'done' ? new Date().toISOString() : editingTask.completedAt;
       updateTask(editingTask.id, { ...taskData, completedAt });
-      // Handle goal linking changes
       if (taskData.goalId !== editingTask.goalId) {
         if (editingTask.goalId) unlinkTaskFromGoal(editingTask.id);
         if (taskData.goalId) linkTaskToGoal(editingTask.id, taskData.goalId);
@@ -183,7 +222,6 @@ export default function Tasks() {
       const newId = crypto.randomUUID();
       addTask({ ...taskData, id: newId, createdAt: new Date().toISOString(), completedAt: undefined });
       if (taskData.goalId) {
-        // Need to link after creation - use setTimeout to ensure state is updated
         setTimeout(() => linkTaskToGoal(newId, taskData.goalId!), 0);
       }
     }
@@ -206,6 +244,8 @@ export default function Tasks() {
   const kanbanStatuses: { key: TaskStatus; label: string }[] = [{ key: 'todo', label: 'To Do' }, { key: 'doing', label: 'In Progress' }, { key: 'done', label: 'Done' }];
   const openEdit = (task: Task) => { setEditingTask(task); setDialogOpen(true); };
   const goalTitles = useMemo(() => { const map: Record<string, string> = {}; data.goals.forEach(g => { map[g.id] = g.title; }); return map; }, [data.goals]);
+
+  const scheduleTask = scheduleTaskId ? data.tasks.find(t => t.id === scheduleTaskId) : null;
 
   if (data.tasks.length === 0) {
     return (
@@ -259,6 +299,7 @@ export default function Tasks() {
             <Select value={filterPriority} onValueChange={setFilterPriority}><SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Priority</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="med">Medium</SelectItem><SelectItem value="low">Low</SelectItem></SelectContent></Select>
             <Select value={filterDue} onValueChange={setFilterDue}><SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Dates</SelectItem><SelectItem value="today">Today</SelectItem><SelectItem value="week">This Week</SelectItem><SelectItem value="overdue">Overdue</SelectItem></SelectContent></Select>
             <Select value={filterGoal} onValueChange={setFilterGoal}><SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Goals</SelectItem><SelectItem value="none">No Goal</SelectItem>{activeGoals.map(g => <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>)}</SelectContent></Select>
+            <Select value={filterScheduled} onValueChange={setFilterScheduled}><SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Schedule</SelectItem><SelectItem value="scheduled">Scheduled</SelectItem><SelectItem value="unscheduled">Not Scheduled</SelectItem></SelectContent></Select>
           </div>
         )}
 
@@ -268,7 +309,7 @@ export default function Tasks() {
             {filtered.length === 0 && <p className="text-sm text-muted-foreground py-8 text-center">No tasks match your filters.</p>}
             {filtered.map(task => (
               <TaskRow key={task.id} task={task} todayStr={todayStr} committedIds={currentPlan.committedTaskIds} goalTitle={task.goalId ? goalTitles[task.goalId] : undefined}
-                onToggle={() => toggleTaskDone(task.id)} onEdit={() => openEdit(task)} onDelete={() => deleteTask(task.id)} />
+                onToggle={() => toggleTaskDone(task.id)} onEdit={() => openEdit(task)} onDelete={() => deleteTask(task.id)} onSchedule={() => setScheduleTaskId(task.id)} />
             ))}
           </div>
         </TabsContent>
@@ -293,12 +334,14 @@ export default function Tasks() {
                             <div className="flex gap-1 shrink-0">
                               {key !== 'done' && <button onClick={() => toggleTaskDone(task.id)} className="text-muted-foreground hover:text-primary"><Check className="h-3.5 w-3.5" /></button>}
                               <button onClick={() => openEdit(task)} className="text-muted-foreground hover:text-primary"><Edit2 className="h-3.5 w-3.5" /></button>
+                              {key !== 'done' && <button onClick={() => setScheduleTaskId(task.id)} className="text-muted-foreground hover:text-primary"><CalendarDays className="h-3.5 w-3.5" /></button>}
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <Badge className={`text-[10px] border ${priorityColor[task.priority]}`}>{priorityLabel[task.priority]}</Badge>
                             {task.dueDate && <span className={`text-[10px] ${task.dueDate < todayStr && task.status !== 'done' ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>{task.dueDate}</span>}
                             {task.goalId && goalTitles[task.goalId] && <Badge variant="secondary" className="text-[8px]"><Target className="h-2 w-2 mr-0.5" />{goalTitles[task.goalId]}</Badge>}
+                            {task.scheduledStart && <Badge variant="secondary" className="text-[8px]"><CalendarDays className="h-2 w-2 mr-0.5" />Scheduled</Badge>}
                           </div>
                         </CardContent>
                       </Card>
@@ -326,7 +369,7 @@ export default function Tasks() {
               </div>
               {smartSort(overdueTasks).map(task => (
                 <TaskRow key={task.id} task={task} todayStr={todayStr} committedIds={currentPlan.committedTaskIds} goalTitle={task.goalId ? goalTitles[task.goalId] : undefined}
-                  onToggle={() => toggleTaskDone(task.id)} onEdit={() => openEdit(task)} onDelete={() => deleteTask(task.id)} />
+                  onToggle={() => toggleTaskDone(task.id)} onEdit={() => openEdit(task)} onDelete={() => deleteTask(task.id)} onSchedule={() => setScheduleTaskId(task.id)} />
               ))}
             </div>
           )}
@@ -356,14 +399,22 @@ export default function Tasks() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Schedule dialog */}
+      <Dialog open={!!scheduleTaskId} onOpenChange={o => { if (!o) setScheduleTaskId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Schedule Task</DialogTitle></DialogHeader>
+          {scheduleTask && <ScheduleModal taskId={scheduleTask.id} taskTitle={scheduleTask.title} onClose={() => setScheduleTaskId(null)} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 // ── Task Row ────────────────────────────────────────────────────────
-function TaskRow({ task, todayStr, committedIds, goalTitle, onToggle, onEdit, onDelete }: {
+function TaskRow({ task, todayStr, committedIds, goalTitle, onToggle, onEdit, onDelete, onSchedule }: {
   task: Task; todayStr: string; committedIds: string[]; goalTitle?: string;
-  onToggle: () => void; onEdit: () => void; onDelete: () => void;
+  onToggle: () => void; onEdit: () => void; onDelete: () => void; onSchedule: () => void;
 }) {
   const isOverdue = task.dueDate && task.dueDate < todayStr && task.status !== 'done';
   return (
@@ -380,6 +431,7 @@ function TaskRow({ task, todayStr, committedIds, goalTitle, onToggle, onEdit, on
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {task.dueDate && <span className={`text-xs ${isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>{isOverdue ? '⚠ ' : ''}{task.dueDate}</span>}
+          {task.scheduledStart && <span className="text-xs text-muted-foreground">📅 {format(new Date(task.scheduledStart), 'h:mm a')}</span>}
           {task.project && <span className="text-xs text-muted-foreground">· {task.project}</span>}
           {task.tags.map(tag => <Badge key={tag} variant="secondary" className="text-[10px] h-4">{tag}</Badge>)}
           {task.subtasks.length > 0 && <span className="text-[10px] text-muted-foreground">{task.subtasks.filter(s => s.done).length}/{task.subtasks.length} subtasks</span>}
@@ -387,6 +439,7 @@ function TaskRow({ task, todayStr, committedIds, goalTitle, onToggle, onEdit, on
       </div>
       <Badge className={`text-[10px] shrink-0 border ${priorityColor[task.priority]}`}>{priorityLabel[task.priority]}</Badge>
       <Badge variant="secondary" className="text-[10px] shrink-0 capitalize">{task.status === 'doing' ? 'in progress' : task.status}</Badge>
+      {task.status !== 'done' && <button onClick={onSchedule} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" title="Schedule"><CalendarDays className="h-3.5 w-3.5" /></button>}
       <button onClick={onEdit} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"><Edit2 className="h-3.5 w-3.5" /></button>
       <button onClick={onDelete} className="text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-3.5 w-3.5" /></button>
     </div>

@@ -29,6 +29,8 @@ export interface Task {
   goalId?: string;
   subtasks: Subtask[];
   recurring?: RecurringConfig;
+  scheduledStart?: string;
+  scheduledEnd?: string;
 }
 
 export type GoalCategory = 'health' | 'career' | 'finance' | 'study' | 'personal' | 'custom';
@@ -67,10 +69,27 @@ export interface CalendarEvent {
   title: string;
   startDateTime: string;
   endDateTime: string;
-  location: string;
-  notes: string;
+  location?: string;
+  notes?: string;
   category: EventCategory;
-  recurring: RecurringOption;
+  recurring?: RecurringConfig | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type FocusBlockStatus = 'planned' | 'completed' | 'skipped';
+
+export interface FocusBlock {
+  id: string;
+  title: string;
+  startDateTime: string;
+  endDateTime: string;
+  linkedTaskId?: string;
+  linkedGoalId?: string;
+  status: FocusBlockStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type HabitFrequency = 'daily' | 'weekly';
@@ -105,6 +124,7 @@ export interface AppData {
   tasks: Task[];
   goals: Goal[];
   events: CalendarEvent[];
+  focusBlocks: FocusBlock[];
   habits: Habit[];
   weeklyPlans: WeeklyPlan[];
   profile: UserProfile;
