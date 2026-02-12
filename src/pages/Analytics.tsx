@@ -2,10 +2,10 @@ import { useState, useMemo } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, isWithinInterval, addDays, eachWeekOfInterval, differenceInMinutes } from 'date-fns';
-import { computeGoalProgress, getGoalDisplayStatus } from '@/lib/stats';
-import { Target, Zap } from 'lucide-react';
+import { computeGoalProgress, getGoalDisplayStatus, getHabitStreak, getHabitAdherenceForRange } from '@/lib/stats';
+import { Target, Zap, Flame, Heart, Activity } from 'lucide-react';
 
 type TimeRange = 'week' | 'month';
 
@@ -132,7 +132,6 @@ export default function Analytics() {
     });
   }, [data.focusBlocks, range]);
 
-  // Most scheduled category
   const topCategory = useMemo(() => {
     const counts: Record<string, number> = {};
     data.events.filter(e => new Date(e.startDateTime) >= rangeStart && new Date(e.startDateTime) <= rangeEnd)
@@ -140,6 +139,65 @@ export default function Analytics() {
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     return sorted[0]?.[0] || 'N/A';
   }, [data.events, rangeStart, rangeEnd]);
+
+  // ── Habit Analytics ──
+  const activeHabits = data.habits.filter(h => (h as any).status !== 'archived');
+
+  const habitAdherenceTrend = useMemo(() => {
+    const days = range === 'week' ? 7 : 30;
+    return Array.from({ length: days }, (_, i) => {
+      const d = subDays(now, days - 1 - i);
+      const dayStr = format(d, 'yyyy-MM-dd');
+      if (activeHabits.length === 0) return { date: range === 'week' ? format(d, 'EEE') : format(d, 'MMM d'), adherence: 0 };
+      const dailyHabits = activeHabits.filter(h => h.frequency === 'daily');
+      const logged = dailyHabits.filter(h => h.logs.includes(dayStr)).length;
+      const adh = dailyHabits.length > 0 ? Math.round((logged / dailyHabits.length) * 100) : 0;
+      return { date: range === 'week' ? format(d, 'EEE') : format(d, 'd'), adherence: adh };
+    });
+  }, [activeHabits, range]);
+
+  const topHabitsByStreak = useMemo(() =>
+    [...activeHabits].sort((a, b) => getHabitStreak(b) - getHabitStreak(a)).slice(0, 5),
+  [activeHabits]);
+
+  const missedHabitsCount = useMemo(() => {
+    const todayDailyHabits = activeHabits.filter(h => h.frequency === 'daily');
+    return todayDailyHabits.filter(h => !h.logs.includes(todayStr)).length;
+  }, [activeHabits, todayStr]);
+
+  // ── Check-in Analytics ──
+  const checkInTrend = useMemo(() => {
+    const days = range === 'week' ? 7 : 30;
+    return Array.from({ length: days }, (_, i) => {
+      const d = subDays(now, days - 1 - i);
+      const dayStr = format(d, 'yyyy-MM-dd');
+      const ci = data.dailyCheckIns.find(c => c.date === dayStr);
+      return {
+        date: range === 'week' ? format(d, 'EEE') : format(d, 'd'),
+        mood: ci?.mood ?? null,
+        energy: ci?.energy ?? null,
+        focus: ci?.focus ?? null,
+      };
+    });
+  }, [data.dailyCheckIns, range]);
+
+  // ── Life Score Trend ──
+  const scoreTrend = useMemo(() => {
+    const days = range === 'week' ? 7 : 30;
+    return Array.from({ length: days }, (_, i) => {
+      const d = subDays(now, days - 1 - i);
+      const dayStr = format(d, 'yyyy-MM-dd');
+      const snapshot = data.lifeScoreSnapshots.find(s => s.date === dayStr);
+      return {
+        date: range === 'week' ? format(d, 'EEE') : format(d, 'd'),
+        score: snapshot?.score ?? null,
+        tasks: snapshot?.breakdown.tasks ?? null,
+        focus: snapshot?.breakdown.focus ?? null,
+        habits: snapshot?.breakdown.habits ?? null,
+        goals: snapshot?.breakdown.goals ?? null,
+      };
+    });
+  }, [data.lifeScoreSnapshots, range]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -175,32 +233,13 @@ export default function Analytics() {
           <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Zap className="h-4 w-4" /> Focus Analytics</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-              <div className="rounded-lg border border-border p-3 text-center">
-                <p className="text-xl font-bold">{plannedMins}m</p>
-                <p className="text-[10px] text-muted-foreground">Planned focus</p>
-              </div>
-              <div className="rounded-lg border border-border p-3 text-center">
-                <p className="text-xl font-bold">{completedMins}m</p>
-                <p className="text-[10px] text-muted-foreground">Completed focus</p>
-              </div>
-              <div className="rounded-lg border border-border p-3 text-center">
-                <p className="text-xl font-bold">{focusRate}%</p>
-                <p className="text-[10px] text-muted-foreground">Completion rate</p>
-              </div>
-              <div className="rounded-lg border border-border p-3 text-center">
-                <p className="text-xl font-bold">{focusBlocksCompleted}</p>
-                <p className="text-[10px] text-muted-foreground">Blocks completed</p>
-              </div>
+              <div className="rounded-lg border border-border p-3 text-center"><p className="text-xl font-bold">{plannedMins}m</p><p className="text-[10px] text-muted-foreground">Planned focus</p></div>
+              <div className="rounded-lg border border-border p-3 text-center"><p className="text-xl font-bold">{completedMins}m</p><p className="text-[10px] text-muted-foreground">Completed focus</p></div>
+              <div className="rounded-lg border border-border p-3 text-center"><p className="text-xl font-bold">{focusRate}%</p><p className="text-[10px] text-muted-foreground">Completion rate</p></div>
+              <div className="rounded-lg border border-border p-3 text-center"><p className="text-xl font-bold">{focusBlocksCompleted}</p><p className="text-[10px] text-muted-foreground">Blocks completed</p></div>
             </div>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={focusPerDay}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                <Tooltip contentStyle={{ fontSize: 12 }} />
-                <Bar dataKey="planned" fill="hsl(var(--muted-foreground))" radius={[3, 3, 0, 0]} name="Planned (min)" />
-                <Bar dataKey="completed" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} name="Completed (min)" />
-              </BarChart>
+              <BarChart data={focusPerDay}><CartesianGrid strokeDasharray="3 3" className="stroke-border" /><XAxis dataKey="date" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} tick={{ fontSize: 10 }} /><Tooltip contentStyle={{ fontSize: 12 }} /><Bar dataKey="planned" fill="hsl(var(--muted-foreground))" radius={[3, 3, 0, 0]} name="Planned (min)" /><Bar dataKey="completed" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} name="Completed (min)" /></BarChart>
             </ResponsiveContainer>
             <div className="mt-3 rounded-lg border border-border p-3 text-sm space-y-1">
               <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Insights</p>
@@ -249,6 +288,106 @@ export default function Analytics() {
           </CardContent>
         </Card>
 
+        {/* ── Habit Analytics ── */}
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Flame className="h-4 w-4" /> Habit Adherence Trend</CardTitle></CardHeader>
+          <CardContent>
+            {activeHabits.length === 0 ? <p className="text-sm text-muted-foreground">No active habits.</p> : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={habitAdherenceTrend}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+                  <Tooltip contentStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="adherence" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2 }} name="Adherence %" />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Top Habits by Streak</CardTitle></CardHeader>
+          <CardContent>
+            {topHabitsByStreak.length === 0 ? <p className="text-sm text-muted-foreground">No habits tracked.</p> : (
+              <div className="space-y-2">
+                {topHabitsByStreak.map(h => {
+                  const streak = getHabitStreak(h);
+                  const adh = getHabitAdherenceForRange(h, range === 'week' ? 7 : 30);
+                  return (
+                    <div key={h.id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Flame className="h-3 w-3 text-orange-500" />
+                        <span className="text-sm">{h.title}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium">{streak}d</span>
+                        <Badge variant="secondary" className="text-[10px]">{adh}%</Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+                <p className="text-xs text-muted-foreground mt-2">Missed today: <strong>{missedHabitsCount}</strong> habits</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Check-in Trends ── */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Heart className="h-4 w-4" /> Check-in Trends</CardTitle></CardHeader>
+          <CardContent>
+            {data.dailyCheckIns.length === 0 ? <p className="text-sm text-muted-foreground">No check-ins yet. Complete your first daily check-in from the Dashboard.</p> : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={checkInTrend}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                  <YAxis domain={[0, 5]} tick={{ fontSize: 10 }} />
+                  <Tooltip contentStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="mood" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2 }} name="Mood" connectNulls />
+                  <Line type="monotone" dataKey="energy" stroke="hsl(var(--chart-2, 220 70% 50%))" strokeWidth={2} dot={{ r: 2 }} name="Energy" connectNulls />
+                  <Line type="monotone" dataKey="focus" stroke="hsl(var(--chart-3, 150 60% 40%))" strokeWidth={2} dot={{ r: 2 }} name="Focus" connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Life Score Trend ── */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Activity className="h-4 w-4" /> Life Score Trend</CardTitle></CardHeader>
+          <CardContent>
+            {data.lifeScoreSnapshots.length === 0 ? <p className="text-sm text-muted-foreground">No score data yet. Visit the Dashboard to generate your first Life Score.</p> : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={scoreTrend}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+                  <Tooltip contentStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="score" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2 }} name="Score" connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+            {data.lifeScoreSnapshots.length > 0 && (
+              <div className="mt-3 rounded-lg border border-border p-3 text-sm space-y-1">
+                <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Breakdown Trend</p>
+                <ResponsiveContainer width="100%" height={150}>
+                  <LineChart data={scoreTrend}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+                    <Tooltip contentStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="tasks" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} name="Tasks" connectNulls />
+                    <Line type="monotone" dataKey="focus" stroke="hsl(var(--chart-2, 220 70% 50%))" strokeWidth={1.5} dot={false} name="Focus" connectNulls />
+                    <Line type="monotone" dataKey="habits" stroke="hsl(var(--chart-3, 150 60% 40%))" strokeWidth={1.5} dot={false} name="Habits" connectNulls />
+                    <Line type="monotone" dataKey="goals" stroke="hsl(var(--chart-4, 40 70% 50%))" strokeWidth={1.5} dot={false} name="Goals" connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Top tags */}
         <Card><CardHeader className="pb-2"><CardTitle className="text-base">Top Tags</CardTitle></CardHeader>
           <CardContent>
@@ -267,22 +406,19 @@ export default function Analytics() {
           </CardContent>
         </Card>
 
-        {/* Habit adherence */}
+        {/* Habit adherence per habit */}
         <Card><CardHeader className="pb-2"><CardTitle className="text-base">Habit Adherence</CardTitle></CardHeader>
           <CardContent>
-            {data.habits.length === 0 && <p className="text-sm text-muted-foreground">No habits tracked yet.</p>}
+            {activeHabits.length === 0 && <p className="text-sm text-muted-foreground">No habits tracked yet.</p>}
             <div className="space-y-3">
-              {data.habits.map(h => {
-                const ws = startOfWeek(now, { weekStartsOn: 1 });
-                const we = endOfWeek(now, { weekStartsOn: 1 });
-                const weekLogs = h.logs.filter(l => l >= format(ws, 'yyyy-MM-dd') && l <= format(we, 'yyyy-MM-dd'));
-                const adherence = Math.round((weekLogs.length / h.targetCountPerPeriod) * 100);
+              {activeHabits.map(h => {
+                const adh = getHabitAdherenceForRange(h, range === 'week' ? 7 : 30);
                 return (
                   <div key={h.id} className="flex items-center justify-between">
                     <span className="text-sm">{h.title}</span>
                     <div className="flex items-center gap-2">
-                      <div className="w-24 h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.min(adherence, 100)}%` }} /></div>
-                      <span className="text-xs text-muted-foreground w-8 text-right">{adherence}%</span>
+                      <div className="w-24 h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.min(adh, 100)}%` }} /></div>
+                      <span className="text-xs text-muted-foreground w-8 text-right">{adh}%</span>
                     </div>
                   </div>
                 );

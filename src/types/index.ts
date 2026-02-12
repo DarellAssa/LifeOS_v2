@@ -93,13 +93,48 @@ export interface FocusBlock {
 }
 
 export type HabitFrequency = 'daily' | 'weekly';
+export type HabitCategory = 'health' | 'study' | 'career' | 'finance' | 'personal' | 'custom';
+export type HabitStatus = 'active' | 'archived';
 
 export interface Habit {
   id: string;
   title: string;
+  description?: string;
   frequency: HabitFrequency;
   targetCountPerPeriod: number;
+  category: HabitCategory;
   logs: string[];
+  createdAt: string;
+  updatedAt: string;
+  status: HabitStatus;
+}
+
+export interface DailyCheckIn {
+  id: string;
+  date: string;
+  mood: number;
+  energy: number;
+  focus: number;
+  highlights?: string;
+  blockers?: string;
+  gratitude?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LifeScoreBreakdown {
+  tasks: number;
+  focus: number;
+  habits: number;
+  goals: number;
+}
+
+export interface LifeScoreSnapshot {
+  id: string;
+  date: string;
+  score: number;
+  breakdown: LifeScoreBreakdown;
+  createdAt: string;
 }
 
 export interface WeeklyPlan {
@@ -126,6 +161,8 @@ export interface AppData {
   events: CalendarEvent[];
   focusBlocks: FocusBlock[];
   habits: Habit[];
+  dailyCheckIns: DailyCheckIn[];
+  lifeScoreSnapshots: LifeScoreSnapshot[];
   weeklyPlans: WeeklyPlan[];
   profile: UserProfile;
   pinnedFocus: PinnedFocus;
