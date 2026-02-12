@@ -1,4 +1,4 @@
-import { Search, Moon, Sun, Bell, Inbox } from 'lucide-react';
+import { Search, Moon, Sun, Bell, Sparkles } from 'lucide-react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,9 +11,10 @@ import { format } from 'date-fns';
 interface AppHeaderProps {
   onOpenSearch: () => void;
   onOpenCommandPalette: () => void;
+  onOpenCopilot: () => void;
 }
 
-export function AppHeader({ onOpenSearch, onOpenCommandPalette }: AppHeaderProps) {
+export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }: AppHeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const { data, markNotificationRead, getUnreadNotificationCount, addInboxItem } = useAppContext();
   const navigate = useNavigate();
@@ -92,6 +93,10 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette }: AppHeaderProps
           </div>
         )}
       </div>
+
+      <Button variant="ghost" size="icon" onClick={onOpenCopilot} className="shrink-0" title="Open Copilot (Ctrl+J)">
+        <Sparkles className="h-4 w-4" />
+      </Button>
 
       <Button variant="ghost" size="icon" onClick={toggleTheme} className="shrink-0">
         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
