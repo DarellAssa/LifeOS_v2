@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap, CalendarDays, Heart, Activity, Brain, Bell, Inbox } from 'lucide-react';
+import { CheckSquare, Target, Flame, TrendingUp, AlertTriangle, Clock, Plus, ArrowRight, Zap, CalendarDays, Heart, Activity, Brain, Bell, Inbox, LayoutTemplate, Cog } from 'lucide-react';
 import { getHabitStreak, computeGoalProgress, getGoalDisplayStatus, computeLifeScore } from '@/lib/stats';
 import { format, addDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -27,7 +27,7 @@ const moodLabels = ['😞', '😕', '😐', '🙂', '😊'];
 
 export default function Dashboard() {
   const {
-    data, addTask, toggleTaskDone, logHabit,
+    data, addTask, toggleTaskDone, logHabit, runTemplate,
     getTodayTasks, getOverdueTasks, completionRateThisWeek, tasksCompletedPerDayThisWeek, avgCompletionTime,
     getPinnedFocus, setPinnedFocus, getActiveGoals, getBehindGoals, getGoalsDueSoon: getGoalsDueSoonCtx,
     getAgendaForDay, createFocusBlockFromTask,
@@ -496,6 +496,60 @@ export default function Dashboard() {
               })}
               {habits.filter(h => (h as any).status !== 'archived').length === 0 && <p className="text-sm text-muted-foreground col-span-4">No habits yet. <button onClick={() => navigate('/habits')} className="text-primary underline">Create one</button></p>}
             </div>
+          </CardContent>
+        </Card>
+        {/* Templates Quick Run */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2"><LayoutTemplate className="h-4 w-4 text-primary" /> Quick Templates</CardTitle>
+              <Button size="sm" variant="ghost" onClick={() => navigate('/templates')} className="text-xs">View all <ArrowRight className="h-3 w-3 ml-1" /></Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {data.templates.slice(0, 3).map(tpl => (
+              <div key={tpl.id} className="flex items-center gap-3 rounded-md border border-border p-2.5 text-sm">
+                <span className="flex-1 truncate">{tpl.name}</span>
+                <Badge variant="outline" className="text-[8px]">{tpl.items.length} items</Badge>
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => {
+                  const result = runTemplate(tpl.id, todayStr);
+                  if (result) navigate('/templates');
+                }}>Run</Button>
+              </div>
+            ))}
+            {data.templates.length === 0 && <p className="text-sm text-muted-foreground">No templates yet. <button onClick={() => navigate('/templates')} className="text-primary underline">Create one</button></p>}
+          </CardContent>
+        </Card>
+
+        {/* Automation Activity */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2"><Cog className="h-4 w-4 text-primary" /> Automations</CardTitle>
+              <Button size="sm" variant="ghost" onClick={() => navigate('/automations')} className="text-xs">View all <ArrowRight className="h-3 w-3 ml-1" /></Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {data.automationRules.filter(r => r.enabled).length === 0 ? (
+              <div className="text-center py-3">
+                <p className="text-sm text-muted-foreground mb-2">No automations enabled.</p>
+                <Button size="sm" variant="outline" onClick={() => navigate('/automations')} className="text-xs">Set up automations</Button>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">{data.automationRules.filter(r => r.enabled).length} rule{data.automationRules.filter(r => r.enabled).length > 1 ? 's' : ''} active</p>
+                {data.automationLogs.slice(-3).reverse().map(log => {
+                  const rule = data.automationRules.find(r => r.id === log.ruleId);
+                  return (
+                    <div key={log.id} className={`flex items-center gap-2 text-xs rounded-md border p-2 ${log.status === 'failed' ? 'border-destructive/20 bg-destructive/5' : 'border-border'}`}>
+                      <div className={`h-1.5 w-1.5 rounded-full ${log.status === 'success' ? 'bg-green-500' : log.status === 'failed' ? 'bg-destructive' : 'bg-muted-foreground'}`} />
+                      <span className="flex-1 truncate">{rule?.name || 'Unknown'}</span>
+                      <span className="text-muted-foreground">{log.status}</span>
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

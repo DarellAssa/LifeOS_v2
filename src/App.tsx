@@ -15,6 +15,8 @@ import Planning from "@/pages/Planning";
 import Notifications from "@/pages/Notifications";
 import InboxPage from "@/pages/InboxPage";
 import SettingsPage from "@/pages/SettingsPage";
+import TemplatesPage from "@/pages/TemplatesPage";
+import AutomationsPage from "@/pages/AutomationsPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +39,8 @@ const App = () => (
               <Route path="/planning" element={<Planning />} />
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/notifications" element={<Notifications />} />
+              <Route path="/templates" element={<TemplatesPage />} />
+              <Route path="/automations" element={<AutomationsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, DailyCheckIn, LifeScoreSnapshot, WeeklyPlan, UserProfile, GoalDisplayStatus, NotificationItem, NotificationSettings, DEFAULT_NOTIFICATION_SETTINGS, InboxItem, Note } from '@/types';
+import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, DailyCheckIn, LifeScoreSnapshot, WeeklyPlan, UserProfile, GoalDisplayStatus, NotificationItem, NotificationSettings, DEFAULT_NOTIFICATION_SETTINGS, InboxItem, Note, Template, AutomationRule, AutomationRunLog } from '@/types';
+import { ApplyTemplateResult, applyTemplate as applyTemplateEngine, evaluateConditions, isThrottled, shouldRunTimeRule, executeActions, BUILT_IN_TEMPLATES, BUILT_IN_AUTOMATIONS } from '@/lib/automations';
 import { seedData } from './seedData';
 import { toast } from '@/hooks/use-toast';
 import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays, addMinutes, isSameDay, parseISO, subDays } from 'date-fns';
@@ -8,7 +9,7 @@ import { generateNotifications, isQuietHours } from '@/lib/notifications';
 import { detectInboxContent, deriveTitle } from '@/lib/inbox';
 
 const STORAGE_KEY = 'lifeos-data';
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 function loadData(): AppData {
   try {
@@ -16,7 +17,7 @@ function loadData(): AppData {
     if (raw) {
       const parsed = JSON.parse(raw) as AppData;
       if (parsed.schemaVersion === SCHEMA_VERSION) return parsed;
-      // Migration from v2-v6 to v7
+      // Migration from v2-v7 to v8
       if (parsed.schemaVersion >= 2) {
         return {
           ...parsed,
@@ -28,6 +29,9 @@ function loadData(): AppData {
           notificationSettings: (parsed as any).notificationSettings || DEFAULT_NOTIFICATION_SETTINGS,
           inboxItems: (parsed as any).inboxItems || [],
           notes: (parsed as any).notes || [],
+          templates: (parsed as any).templates || BUILT_IN_TEMPLATES,
+          automationRules: (parsed as any).automationRules || BUILT_IN_AUTOMATIONS,
+          automationLogs: (parsed as any).automationLogs || [],
           goals: parsed.goals.map((g: any) => ({
             ...g,
             createdAt: g.createdAt || new Date().toISOString(),
@@ -168,6 +172,18 @@ interface AppContextType {
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
   pinNote: (id: string, pinned: boolean) => void;
+  // Templates
+  createTemplate: (tpl: Template) => void;
+  updateTemplate: (id: string, updates: Partial<Template>) => void;
+  deleteTemplate: (id: string) => void;
+  duplicateTemplate: (id: string) => void;
+  runTemplate: (templateId: string, runDate: string) => ApplyTemplateResult | null;
+  // Automations
+  createAutomationRule: (rule: AutomationRule) => void;
+  updateAutomationRule: (id: string, updates: Partial<AutomationRule>) => void;
+  deleteAutomationRule: (id: string) => void;
+  toggleRuleEnabled: (id: string) => void;
+  undoAutomationRun: (logId: string) => void;
 }
 
 export type AgendaItem = {
@@ -469,7 +485,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const imported = JSON.parse(json) as AppData;
       if (mode === 'replace') {
-        setData({ ...imported, schemaVersion: SCHEMA_VERSION, focusBlocks: imported.focusBlocks || [], dailyCheckIns: imported.dailyCheckIns || [], lifeScoreSnapshots: imported.lifeScoreSnapshots || [], notifications: imported.notifications || [], notificationSettings: imported.notificationSettings || DEFAULT_NOTIFICATION_SETTINGS, inboxItems: (imported as any).inboxItems || [], notes: (imported as any).notes || [] });
+        setData({ ...imported, schemaVersion: SCHEMA_VERSION, focusBlocks: imported.focusBlocks || [], dailyCheckIns: imported.dailyCheckIns || [], lifeScoreSnapshots: imported.lifeScoreSnapshots || [], notifications: imported.notifications || [], notificationSettings: imported.notificationSettings || DEFAULT_NOTIFICATION_SETTINGS, inboxItems: (imported as any).inboxItems || [], notes: (imported as any).notes || [], templates: (imported as any).templates || BUILT_IN_TEMPLATES, automationRules: (imported as any).automationRules || BUILT_IN_AUTOMATIONS, automationLogs: (imported as any).automationLogs || [] });
       } else {
         update(d => ({
           ...d,
@@ -483,6 +499,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           notifications: [...d.notifications, ...(imported.notifications || []).filter(n => !d.notifications.some(x => x.id === n.id))],
           inboxItems: [...d.inboxItems, ...((imported as any).inboxItems || []).filter((i: any) => !d.inboxItems.some(x => x.id === i.id))],
           notes: [...d.notes, ...((imported as any).notes || []).filter((n: any) => !d.notes.some(x => x.id === n.id))],
+          templates: [...d.templates, ...((imported as any).templates || []).filter((t: any) => !d.templates.some(x => x.id === t.id))],
+          automationRules: [...d.automationRules, ...((imported as any).automationRules || []).filter((r: any) => !d.automationRules.some(x => x.id === r.id))],
+          automationLogs: [...d.automationLogs, ...((imported as any).automationLogs || []).filter((l: any) => !d.automationLogs.some(x => x.id === l.id))],
         }));
       }
       toast({ title: `Data ${mode === 'replace' ? 'replaced' : 'merged'} successfully` });
@@ -821,6 +840,118 @@ export function AppProvider({ children }: { children: ReactNode }) {
     update(d => ({ ...d, notes: d.notes.map(n => n.id === id ? { ...n, pinned, updatedAt: new Date().toISOString() } : n) }));
   }, [update]);
 
+  // ── Templates ──
+  const createTemplate = useCallback((tpl: Template) => {
+    update(d => ({ ...d, templates: [...d.templates, tpl] }));
+    toast({ title: 'Template created', description: tpl.name });
+  }, [update]);
+
+  const updateTemplate = useCallback((id: string, updates: Partial<Template>) => {
+    update(d => ({ ...d, templates: d.templates.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t) }));
+    toast({ title: 'Template updated' });
+  }, [update]);
+
+  const deleteTemplate = useCallback((id: string) => {
+    update(d => ({ ...d, templates: d.templates.filter(t => t.id !== id) }));
+    toast({ title: 'Template deleted' });
+  }, [update]);
+
+  const duplicateTemplate = useCallback((id: string) => {
+    const tpl = data.templates.find(t => t.id === id);
+    if (!tpl) return;
+    const now = new Date().toISOString();
+    const dup: Template = { ...tpl, id: crypto.randomUUID(), name: `${tpl.name} (copy)`, isBuiltIn: false, createdAt: now, updatedAt: now };
+    update(d => ({ ...d, templates: [...d.templates, dup] }));
+    toast({ title: 'Template duplicated' });
+  }, [update, data.templates]);
+
+  const runTemplate = useCallback((templateId: string, runDate: string): ApplyTemplateResult | null => {
+    const tpl = data.templates.find(t => t.id === templateId);
+    if (!tpl) return null;
+    const { newData, result } = applyTemplateEngine(tpl, runDate, data);
+    setData(newData);
+    toast({ title: 'Template applied', description: `Created ${result.createdRefs.length} items` });
+    return result;
+  }, [data]);
+
+  // ── Automation Rules ──
+  const createAutomationRule = useCallback((rule: AutomationRule) => {
+    update(d => ({ ...d, automationRules: [...d.automationRules, rule] }));
+    toast({ title: 'Automation rule created', description: rule.name });
+  }, [update]);
+
+  const updateAutomationRule = useCallback((id: string, updates: Partial<AutomationRule>) => {
+    update(d => ({ ...d, automationRules: d.automationRules.map(r => r.id === id ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r) }));
+    toast({ title: 'Rule updated' });
+  }, [update]);
+
+  const deleteAutomationRule = useCallback((id: string) => {
+    update(d => ({ ...d, automationRules: d.automationRules.filter(r => r.id !== id) }));
+    toast({ title: 'Rule deleted' });
+  }, [update]);
+
+  const toggleRuleEnabled = useCallback((id: string) => {
+    update(d => ({
+      ...d, automationRules: d.automationRules.map(r => r.id === id ? { ...r, enabled: !r.enabled, updatedAt: new Date().toISOString() } : r),
+    }));
+  }, [update]);
+
+  const undoAutomationRun = useCallback((logId: string) => {
+    const log = data.automationLogs.find(l => l.id === logId);
+    if (!log?.undoToken) return;
+    update(d => {
+      let nd = { ...d };
+      for (const ref of log.undoToken!.ids) {
+        switch (ref.kind) {
+          case 'task': nd = { ...nd, tasks: nd.tasks.filter(t => t.id !== ref.id) }; break;
+          case 'event': nd = { ...nd, events: nd.events.filter(e => e.id !== ref.id) }; break;
+          case 'focusBlock': nd = { ...nd, focusBlocks: nd.focusBlocks.filter(fb => fb.id !== ref.id) }; break;
+          case 'habit': nd = { ...nd, habits: nd.habits.filter(h => h.id !== ref.id) }; break;
+          case 'goal': nd = { ...nd, goals: nd.goals.filter(g => g.id !== ref.id) }; break;
+          case 'notification': nd = { ...nd, notifications: nd.notifications.filter(n => n.id !== ref.id) }; break;
+          case 'inbox': nd = { ...nd, inboxItems: nd.inboxItems.filter(i => i.id !== ref.id) }; break;
+          case 'note': nd = { ...nd, notes: nd.notes.filter(n => n.id !== ref.id) }; break;
+        }
+      }
+      nd = { ...nd, automationLogs: nd.automationLogs.map(l => l.id === logId ? { ...l, undoToken: undefined } : l) };
+      return nd;
+    });
+    toast({ title: 'Automation undone' });
+  }, [update, data.automationLogs]);
+
+  // ── Automation Time Tick ──
+  const lastAutoTickRef = useRef<string>('');
+  useEffect(() => {
+    const tick = () => {
+      const key = format(new Date(), 'yyyy-MM-dd-HH-mm');
+      if (lastAutoTickRef.current === key) return;
+      lastAutoTickRef.current = key;
+
+      setData(prev => {
+        let d = { ...prev };
+        const enabledRules = d.automationRules.filter(r => r.enabled && r.trigger.type === 'time');
+        for (const rule of enabledRules) {
+          if (!shouldRunTimeRule(rule)) continue;
+          if (isThrottled(rule, d.automationLogs)) {
+            d = { ...d, automationLogs: [...d.automationLogs, { id: crypto.randomUUID(), ruleId: rule.id, ranAt: new Date().toISOString(), status: 'throttled', reason: 'Rate limited', createdEntityRefs: [] }] };
+            continue;
+          }
+          if (!evaluateConditions(rule.conditions, d)) {
+            d = { ...d, automationLogs: [...d.automationLogs, { id: crypto.randomUUID(), ruleId: rule.id, ranAt: new Date().toISOString(), status: 'skipped', reason: 'Conditions not met', createdEntityRefs: [] }] };
+            continue;
+          }
+          const { newData, log } = executeActions(rule, d, d.templates);
+          d = { ...newData, automationRules: newData.automationRules.map(r => r.id === rule.id ? { ...r, lastRunAt: new Date().toISOString() } : r), automationLogs: [...newData.automationLogs, log] };
+        }
+        return d;
+      });
+    };
+
+    tick();
+    const interval = setInterval(tick, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <AppContext.Provider value={{
       data, addTask, updateTask, deleteTask, toggleTaskDone, changeTaskStatus, scheduleTask, unscheduleTask,
@@ -843,6 +974,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addInboxItem, updateInboxItem, deleteInboxItem, archiveInboxItem, pinInboxItem, setInboxStatus,
       convertInboxToTask, convertInboxToGoal, convertInboxToEvent, convertInboxToHabit, convertInboxToFocusBlock, convertInboxToNote,
       createNote, updateNote, deleteNote, pinNote,
+      createTemplate, updateTemplate, deleteTemplate, duplicateTemplate, runTemplate,
+      createAutomationRule, updateAutomationRule, deleteAutomationRule, toggleRuleEnabled, undoAutomationRun,
     }}>
       {children}
     </AppContext.Provider>

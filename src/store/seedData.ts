@@ -1,5 +1,6 @@
 import { AppData, DEFAULT_NOTIFICATION_SETTINGS } from '@/types';
 import { format, subDays, addDays } from 'date-fns';
+import { BUILT_IN_TEMPLATES, BUILT_IN_AUTOMATIONS } from '@/lib/automations';
 
 const today = new Date();
 const fmt = (d: Date) => format(d, 'yyyy-MM-dd');
@@ -55,4 +56,7 @@ export const seedData: AppData = {
   notificationSettings: DEFAULT_NOTIFICATION_SETTINGS,
   inboxItems: [],
   notes: [],
+  templates: BUILT_IN_TEMPLATES,
+  automationRules: BUILT_IN_AUTOMATIONS,
+  automationLogs: [],
 };

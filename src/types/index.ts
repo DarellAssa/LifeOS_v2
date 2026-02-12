@@ -255,6 +255,8 @@ export interface Note {
   pinned: boolean;
 }
 
+export type { Template, TemplateItem, TemplateCategory, TemplateSchedule, AutomationRule, AutomationTrigger, AutomationCondition, AutomationAction, AutomationRunLog, AutomationRunStatus } from './templates';
+
 export interface AppData {
   schemaVersion: number;
   tasks: Task[];
@@ -271,4 +273,7 @@ export interface AppData {
   notes: Note[];
   profile: UserProfile;
   pinnedFocus: PinnedFocus;
+  templates: import('./templates').Template[];
+  automationRules: import('./templates').AutomationRule[];
+  automationLogs: import('./templates').AutomationRunLog[];
 }
