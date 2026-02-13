@@ -1,71 +1,27 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, DailyCheckIn, LifeScoreSnapshot, WeeklyPlan, UserProfile, GoalDisplayStatus, NotificationItem, NotificationSettings, DEFAULT_NOTIFICATION_SETTINGS, InboxItem, Note, Template, AutomationRule, AutomationRunLog } from '@/types';
 import { ApplyTemplateResult, applyTemplate as applyTemplateEngine, evaluateConditions, isThrottled, shouldRunTimeRule, executeActions, BUILT_IN_TEMPLATES, BUILT_IN_AUTOMATIONS } from '@/lib/automations';
-import { seedData } from './seedData';
 import { toast } from '@/hooks/use-toast';
 import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays, addMinutes, isSameDay, parseISO, subDays } from 'date-fns';
 import { computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon as getGoalsDueSoonUtil, computeLifeScore } from '@/lib/stats';
 import { generateNotifications, isQuietHours } from '@/lib/notifications';
 import { detectInboxContent, deriveTitle } from '@/lib/inbox';
+import { useAuth } from '@/hooks/useAuth';
+import { fetchAllUserData, dbUpsertTask, dbDeleteTask, dbUpsertGoal, dbDeleteGoal, dbUpsertEvent, dbDeleteEvent, dbUpsertFocusBlock, dbDeleteFocusBlock, dbUpsertHabit, dbDeleteHabit, dbUpsertCheckIn, dbDeleteCheckIn, dbUpsertScore, dbUpsertWeeklyPlan, dbUpsertNotification, dbUpdateNotification, dbUpsertNotificationSettings, dbUpsertInboxItem, dbDeleteInboxItem, dbUpsertNote, dbDeleteNote, dbUpsertTemplate, dbDeleteTemplate, dbUpsertAutomationRule, dbDeleteAutomationRule, dbInsertAutomationLog, dbUpsertPinnedFocus } from '@/lib/db';
 
-const STORAGE_KEY = 'lifeos-data';
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
-function loadData(): AppData {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as AppData;
-      if (parsed.schemaVersion === SCHEMA_VERSION) return parsed;
-      // Migration from v2-v7 to v8
-      if (parsed.schemaVersion >= 2) {
-        return {
-          ...parsed,
-          schemaVersion: SCHEMA_VERSION,
-          focusBlocks: (parsed as any).focusBlocks || [],
-          dailyCheckIns: (parsed as any).dailyCheckIns || [],
-          lifeScoreSnapshots: (parsed as any).lifeScoreSnapshots || [],
-          notifications: (parsed as any).notifications || [],
-          notificationSettings: (parsed as any).notificationSettings || DEFAULT_NOTIFICATION_SETTINGS,
-          inboxItems: (parsed as any).inboxItems || [],
-          notes: (parsed as any).notes || [],
-          templates: (parsed as any).templates || BUILT_IN_TEMPLATES,
-          automationRules: (parsed as any).automationRules || BUILT_IN_AUTOMATIONS,
-          automationLogs: (parsed as any).automationLogs || [],
-          goals: parsed.goals.map((g: any) => ({
-            ...g,
-            createdAt: g.createdAt || new Date().toISOString(),
-            updatedAt: g.updatedAt || new Date().toISOString(),
-            milestones: (g.milestones || []).map((m: any) => ({
-              id: m.id, title: m.title, date: m.date || m.targetDate, done: m.done ?? m.completed ?? false,
-            })),
-          })),
-          events: parsed.events.map((e: any) => ({
-            ...e,
-            createdAt: e.createdAt || new Date().toISOString(),
-            updatedAt: e.updatedAt || new Date().toISOString(),
-            recurring: e.recurring === 'daily' ? { type: 'daily', interval: 1 } :
-              e.recurring === 'weekly' ? { type: 'weekly', interval: 1 } :
-              e.recurring === 'monthly' ? { type: 'monthly', interval: 1 } :
-              typeof e.recurring === 'object' ? e.recurring : null,
-          })),
-          habits: parsed.habits.map((h: any) => ({
-            ...h,
-            category: h.category || 'personal',
-            description: h.description || '',
-            createdAt: h.createdAt || new Date().toISOString(),
-            updatedAt: h.updatedAt || new Date().toISOString(),
-            status: h.status || 'active',
-          })),
-        };
-      }
-    }
-  } catch { /* use seed */ }
-  return JSON.parse(JSON.stringify(seedData));
-}
-
-function saveData(data: AppData) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+function emptyData(): AppData {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    profile: { name: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, weekStartDay: 'monday' },
+    pinnedFocus: {},
+    tasks: [], goals: [], events: [], focusBlocks: [], habits: [],
+    dailyCheckIns: [], lifeScoreSnapshots: [], weeklyPlans: [],
+    notifications: [], notificationSettings: DEFAULT_NOTIFICATION_SETTINGS,
+    inboxItems: [], notes: [],
+    templates: [], automationRules: [], automationLogs: [],
+  };
 }
 
 interface AppContextType {
@@ -203,9 +159,29 @@ export type AgendaItem = {
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData>(loadData);
+  const { user, profile } = useAuth();
+  const [data, setData] = useState<AppData>(emptyData);
+  const [loaded, setLoaded] = useState(false);
+  const userId = user?.id;
 
-  useEffect(() => { saveData(data); }, [data]);
+  // Load data from DB on mount
+  useEffect(() => {
+    if (!userId) return;
+    fetchAllUserData(userId).then(d => {
+      // Set profile name from auth profile
+      if (profile?.first_name) {
+        d.profile.name = profile.first_name;
+      }
+      if (profile?.week_start) {
+        d.profile.weekStartDay = profile.week_start === 'sun' ? 'sunday' : 'monday';
+      }
+      if (profile?.timezone) {
+        d.profile.timezone = profile.timezone;
+      }
+      setData(d);
+      setLoaded(true);
+    });
+  }, [userId, profile?.first_name, profile?.week_start, profile?.timezone]);
 
   const update = useCallback((fn: (prev: AppData) => AppData) => {
     setData(prev => fn(prev));
@@ -214,12 +190,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Tasks ──
   const addTask = useCallback((task: Task) => {
     update(d => ({ ...d, tasks: [...d.tasks, task] }));
+    if (userId) dbUpsertTask(userId, task);
     toast({ title: 'Task created', description: task.title });
-  }, [update]);
+  }, [update, userId]);
 
   const updateTask = useCallback((id: string, updates: Partial<Task>) => {
-    update(d => ({ ...d, tasks: d.tasks.map(t => t.id === id ? { ...t, ...updates } : t) }));
-  }, [update]);
+    update(d => {
+      const updated = d.tasks.map(t => t.id === id ? { ...t, ...updates } : t);
+      const task = updated.find(t => t.id === id);
+      if (task && userId) dbUpsertTask(userId, task);
+      return { ...d, tasks: updated };
+    });
+  }, [update, userId]);
 
   const deleteTask = useCallback((id: string) => {
     update(d => ({
@@ -228,8 +210,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       goals: d.goals.map(g => ({ ...g, linkedTaskIds: g.linkedTaskIds.filter(tid => tid !== id) })),
       focusBlocks: d.focusBlocks.map(fb => fb.linkedTaskId === id ? { ...fb, linkedTaskId: undefined } : fb),
     }));
+    if (userId) dbDeleteTask(userId, id);
     toast({ title: 'Task deleted' });
-  }, [update]);
+  }, [update, userId]);
 
   const toggleTaskDone = useCallback((id: string) => {
     update(d => ({
@@ -509,9 +492,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const resetData = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
-    setData(JSON.parse(JSON.stringify(seedData)));
-    toast({ title: 'Data reset to defaults' });
+    setData(emptyData());
+    toast({ title: 'Data reset' });
   }, []);
 
   // ── Task Selectors ──
