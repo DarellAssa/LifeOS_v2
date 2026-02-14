@@ -16,6 +16,7 @@ import { NotificationType } from '@/types';
 import { resetTourForUser, isTourDebugEnabled, setTourDebugEnabled } from '@/components/GuidedTour';
 import { dbDeleteDemoData } from '@/lib/db';
 import { useNavigate } from 'react-router-dom';
+import TrashSection from '@/components/TrashSection';
 
 const NOTIF_TYPE_LABELS: Record<NotificationType, string> = {
   task_overdue: 'Overdue tasks',
@@ -149,6 +150,9 @@ export default function SettingsPage() {
           <TabsTrigger value="modules">Modules</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
+          <TabsTrigger value="trash" className="flex items-center gap-1">
+            <Trash2 className="h-3 w-3" /> Trash
+          </TabsTrigger>
           <TabsTrigger value="help">Help</TabsTrigger>
         </TabsList>
 
@@ -357,6 +361,10 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="trash" className="mt-4">
+          <TrashSection />
         </TabsContent>
 
         <TabsContent value="help" className="space-y-4 mt-4">
