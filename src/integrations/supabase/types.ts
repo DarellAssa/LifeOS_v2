@@ -19,6 +19,7 @@ export type Database = {
           actions: Json | null
           conditions: Json | null
           created_at: string
+          deleted_at: string | null
           enabled: boolean | null
           id: string
           is_demo: boolean | null
@@ -33,6 +34,7 @@ export type Database = {
           actions?: Json | null
           conditions?: Json | null
           created_at?: string
+          deleted_at?: string | null
           enabled?: boolean | null
           id?: string
           is_demo?: boolean | null
@@ -47,6 +49,7 @@ export type Database = {
           actions?: Json | null
           conditions?: Json | null
           created_at?: string
+          deleted_at?: string | null
           enabled?: boolean | null
           id?: string
           is_demo?: boolean | null
@@ -99,9 +102,11 @@ export type Database = {
         Row: {
           category: string | null
           created_at: string
+          deleted_at: string | null
           end_date_time: string
           id: string
           is_demo: boolean | null
+          linked_task_id: string | null
           location: string | null
           notes: string | null
           recurring: Json | null
@@ -113,9 +118,11 @@ export type Database = {
         Insert: {
           category?: string | null
           created_at?: string
+          deleted_at?: string | null
           end_date_time: string
           id?: string
           is_demo?: boolean | null
+          linked_task_id?: string | null
           location?: string | null
           notes?: string | null
           recurring?: Json | null
@@ -127,9 +134,11 @@ export type Database = {
         Update: {
           category?: string | null
           created_at?: string
+          deleted_at?: string | null
           end_date_time?: string
           id?: string
           is_demo?: boolean | null
+          linked_task_id?: string | null
           location?: string | null
           notes?: string | null
           recurring?: Json | null
@@ -188,6 +197,7 @@ export type Database = {
       focus_blocks: {
         Row: {
           created_at: string
+          deleted_at: string | null
           end_date_time: string
           id: string
           is_demo: boolean | null
@@ -202,6 +212,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           end_date_time: string
           id?: string
           is_demo?: boolean | null
@@ -216,6 +227,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           end_date_time?: string
           id?: string
           is_demo?: boolean | null
@@ -234,6 +246,7 @@ export type Database = {
         Row: {
           category: string
           created_at: string
+          deleted_at: string | null
           description: string | null
           id: string
           is_demo: boolean | null
@@ -251,6 +264,7 @@ export type Database = {
         Insert: {
           category?: string
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           id?: string
           is_demo?: boolean | null
@@ -268,6 +282,7 @@ export type Database = {
         Update: {
           category?: string
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           id?: string
           is_demo?: boolean | null
@@ -284,10 +299,47 @@ export type Database = {
         }
         Relationships: []
       }
+      habit_logs: {
+        Row: {
+          count: number | null
+          created_at: string | null
+          habit_id: string
+          id: string
+          logged_on: string
+          user_id: string
+        }
+        Insert: {
+          count?: number | null
+          created_at?: string | null
+          habit_id: string
+          id?: string
+          logged_on: string
+          user_id: string
+        }
+        Update: {
+          count?: number | null
+          created_at?: string | null
+          habit_id?: string
+          id?: string
+          logged_on?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habit_logs_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       habits: {
         Row: {
+          active: boolean | null
           category: string | null
           created_at: string
+          deleted_at: string | null
           description: string | null
           frequency: string
           id: string
@@ -300,8 +352,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active?: boolean | null
           category?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           frequency?: string
           id?: string
@@ -314,8 +368,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active?: boolean | null
           category?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           frequency?: string
           id?: string
@@ -334,6 +390,7 @@ export type Database = {
           content: string
           conversion: Json | null
           created_at: string
+          deleted_at: string | null
           detected: Json | null
           id: string
           is_demo: boolean | null
@@ -349,6 +406,7 @@ export type Database = {
           content: string
           conversion?: Json | null
           created_at?: string
+          deleted_at?: string | null
           detected?: Json | null
           id?: string
           is_demo?: boolean | null
@@ -364,6 +422,7 @@ export type Database = {
           content?: string
           conversion?: Json | null
           created_at?: string
+          deleted_at?: string | null
           detected?: Json | null
           id?: string
           is_demo?: boolean | null
@@ -411,6 +470,7 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          deleted_at: string | null
           id: string
           is_demo: boolean | null
           pinned: boolean | null
@@ -422,6 +482,7 @@ export type Database = {
         Insert: {
           content?: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_demo?: boolean | null
           pinned?: boolean | null
@@ -433,6 +494,7 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_demo?: boolean | null
           pinned?: boolean | null
@@ -495,6 +557,7 @@ export type Database = {
           is_demo: boolean | null
           message: string
           read_at: string | null
+          route: string | null
           severity: string
           snoozed_until: string | null
           title: string
@@ -510,6 +573,7 @@ export type Database = {
           is_demo?: boolean | null
           message: string
           read_at?: string | null
+          route?: string | null
           severity?: string
           snoozed_until?: string | null
           title: string
@@ -525,6 +589,7 @@ export type Database = {
           is_demo?: boolean | null
           message?: string
           read_at?: string | null
+          route?: string | null
           severity?: string
           snoozed_until?: string | null
           title?: string
@@ -606,6 +671,7 @@ export type Database = {
         Row: {
           completed_at: string | null
           created_at: string
+          deleted_at: string | null
           description: string | null
           due_date: string | null
           estimated_minutes: number | null
@@ -617,6 +683,7 @@ export type Database = {
           recurring: Json | null
           scheduled_end: string | null
           scheduled_start: string | null
+          source: string | null
           status: string
           subtasks: Json | null
           tags: Json | null
@@ -627,6 +694,7 @@ export type Database = {
         Insert: {
           completed_at?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
@@ -638,6 +706,7 @@ export type Database = {
           recurring?: Json | null
           scheduled_end?: string | null
           scheduled_start?: string | null
+          source?: string | null
           status?: string
           subtasks?: Json | null
           tags?: Json | null
@@ -648,6 +717,7 @@ export type Database = {
         Update: {
           completed_at?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
@@ -659,6 +729,7 @@ export type Database = {
           recurring?: Json | null
           scheduled_end?: string | null
           scheduled_start?: string | null
+          source?: string | null
           status?: string
           subtasks?: Json | null
           tags?: Json | null
@@ -673,6 +744,7 @@ export type Database = {
           category: string | null
           created_at: string
           default_schedule: Json | null
+          deleted_at: string | null
           description: string | null
           id: string
           is_built_in: boolean | null
@@ -686,6 +758,7 @@ export type Database = {
           category?: string | null
           created_at?: string
           default_schedule?: Json | null
+          deleted_at?: string | null
           description?: string | null
           id?: string
           is_built_in?: boolean | null
@@ -699,6 +772,7 @@ export type Database = {
           category?: string | null
           created_at?: string
           default_schedule?: Json | null
+          deleted_at?: string | null
           description?: string | null
           id?: string
           is_built_in?: boolean | null
