@@ -13,7 +13,6 @@ export function AppLayout() {
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotInitialMsg, setCopilotInitialMsg] = useState<string | undefined>();
   const { isModuleEnabled } = useAuth();
-  const location = useLocation();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -40,61 +39,65 @@ export function AppLayout() {
   const tourSteps = useMemo<TourStep[]>(() => {
     const steps: TourStep[] = [
       {
-        targetSelector: '[data-tour="greeting"]',
-        title: 'This is your command center',
-        text: 'LifeOS shows what matters today and what\'s slipping. You can customize it anytime.',
+        id: 'dashboard',
+        targetSelector: '[data-tour="dashboard-header"]',
+        title: 'This is Today',
+        body: 'LifeOS surfaces what matters now: what\'s due, what\'s behind, and your next action.',
+        placement: 'bottom',
       },
       {
-        targetSelector: '[data-tour="search"]',
-        title: 'Capture anything, instantly',
-        text: 'Dump thoughts, links, and to-dos here. Sort them later without losing anything.',
-        cta: 'Try it: press ⌘K and type "capture".',
+        id: 'quick-capture',
+        targetSelector: '[data-tour="quick-capture"]',
+        title: 'Capture anything in seconds',
+        body: 'Drop thoughts, links, and to-dos into Inbox. Organize when you have time — nothing gets lost.',
+        placement: 'bottom',
+      },
+      {
+        id: 'tasks',
+        targetSelector: '[data-tour="nav-tasks"]',
+        title: 'Turn intent into action',
+        body: 'Tasks are your execution layer. Keep them small and specific.',
+        placement: 'right',
+        route: '/tasks',
+        requiredModule: 'tasks',
       },
     ];
 
-    if (isModuleEnabled('tasks')) {
-      steps.push({
-        targetSelector: '[data-tour="sidebar"] a[href="/tasks"]',
-        title: 'Tasks are your execution layer',
-        text: 'Create tasks, set priorities, and keep your week under control.',
-      });
-    }
-
     if (isModuleEnabled('calendar') || isModuleEnabled('focus')) {
       steps.push({
-        targetSelector: '[data-tour="sidebar"] a[href="/calendar"]',
+        id: 'calendar',
+        targetSelector: '[data-tour="nav-calendar"]',
         title: 'Schedule focus, not just tasks',
-        text: 'Time-block deep work so your plan becomes real.',
+        body: 'Time-block deep work so plans actually happen. Start with one 30–60 min block.',
+        placement: 'right',
+        route: '/calendar',
+        requiredModule: 'calendar',
       });
     }
 
     if (isModuleEnabled('goals')) {
       steps.push({
-        targetSelector: '[data-tour="sidebar"] a[href="/goals"]',
+        id: 'goals',
+        targetSelector: '[data-tour="nav-goals"]',
         title: 'Goals keep you pointed forward',
-        text: 'Link tasks to goals and see what\'s on track or falling behind.',
-      });
-    }
-
-    if (isModuleEnabled('habits') || isModuleEnabled('checkin')) {
-      steps.push({
-        targetSelector: '[data-tour="sidebar"] a[href="/habits"]',
-        title: 'Consistency beats motivation',
-        text: 'Small habits and quick check-ins build your Life Score over time.',
+        body: 'Link tasks to goals and see what\'s on track — without overthinking it.',
+        placement: 'right',
+        route: '/goals',
+        requiredModule: 'goals',
       });
     }
 
     steps.push({
-      targetSelector: '[data-tour="sidebar"] a[href="/settings"]',
-      title: 'You\'re never locked in',
-      text: 'Turn modules on/off, change your setup, or re-run onboarding anytime.',
+      id: 'settings',
+      targetSelector: '[data-tour="nav-settings"]',
+      title: 'You control the system',
+      body: 'Enable or hide modules anytime. Nothing is permanent — LifeOS adapts to you.',
+      placement: 'right',
+      route: '/settings',
     });
 
     return steps;
   }, [isModuleEnabled]);
-
-  // Only show tour on dashboard
-  const showTour = location.pathname === '/';
 
   return (
     <SidebarProvider>
@@ -113,7 +116,7 @@ export function AppLayout() {
       </div>
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} onOpenCopilot={openCopilotWith} />
       <CopilotDrawer open={copilotOpen} onOpenChange={setCopilotOpen} initialMessage={copilotInitialMsg} />
-      {showTour && <GuidedTour steps={tourSteps} />}
+      <GuidedTour steps={tourSteps} />
     </SidebarProvider>
   );
 }

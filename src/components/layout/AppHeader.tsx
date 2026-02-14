@@ -51,8 +51,8 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
     <header className="flex h-14 items-center gap-4 border-b border-border bg-background px-4">
       <SidebarTrigger className="shrink-0" />
       <div className="flex flex-1 items-center gap-2">
-        <button
-          data-tour="search"
+         <button
+          data-tour="quick-capture"
           onClick={onOpenSearch}
           className="flex h-9 w-full max-w-sm items-center gap-2 rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted"
         >
