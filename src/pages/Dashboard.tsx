@@ -205,7 +205,7 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div data-tour="greeting">
+      <div data-tour="dashboard-header">
         <h1 className="text-2xl font-bold tracking-tight">Good {greeting}, {userName}</h1>
         <p className="text-muted-foreground text-sm mt-1">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
