@@ -667,6 +667,24 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduler_state: {
+        Row: {
+          last_automation_run: string | null
+          last_notification_run: string | null
+          user_id: string
+        }
+        Insert: {
+          last_automation_run?: string | null
+          last_notification_run?: string | null
+          user_id: string
+        }
+        Update: {
+          last_automation_run?: string | null
+          last_notification_run?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           completed_at: string | null
