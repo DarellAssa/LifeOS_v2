@@ -106,6 +106,7 @@ export type Database = {
           ran_at: string
           reason: string | null
           rule_id: string
+          run_key: string | null
           status: string
           undo_token: Json | null
           user_id: string
@@ -117,6 +118,7 @@ export type Database = {
           ran_at: string
           reason?: string | null
           rule_id: string
+          run_key?: string | null
           status?: string
           undo_token?: Json | null
           user_id: string
@@ -128,6 +130,7 @@ export type Database = {
           ran_at?: string
           reason?: string | null
           rule_id?: string
+          run_key?: string | null
           status?: string
           undo_token?: Json | null
           user_id?: string
@@ -641,6 +644,36 @@ export type Database = {
         }
         Relationships: []
       }
+      job_run_logs: {
+        Row: {
+          counts: Json
+          duration_ms: number
+          errors: Json
+          id: string
+          mode: string
+          ts: string
+          user_id: string | null
+        }
+        Insert: {
+          counts?: Json
+          duration_ms?: number
+          errors?: Json
+          id?: string
+          mode: string
+          ts?: string
+          user_id?: string | null
+        }
+        Update: {
+          counts?: Json
+          duration_ms?: number
+          errors?: Json
+          id?: string
+          mode?: string
+          ts?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       life_score_snapshots: {
         Row: {
           breakdown: Json
@@ -785,6 +818,7 @@ export type Database = {
           id: string
           is_demo: boolean | null
           message: string
+          notif_key: string | null
           read_at: string | null
           route: string | null
           severity: string
@@ -801,6 +835,7 @@ export type Database = {
           id?: string
           is_demo?: boolean | null
           message: string
+          notif_key?: string | null
           read_at?: string | null
           route?: string | null
           severity?: string
@@ -817,6 +852,7 @@ export type Database = {
           id?: string
           is_demo?: boolean | null
           message?: string
+          notif_key?: string | null
           read_at?: string | null
           route?: string | null
           severity?: string
