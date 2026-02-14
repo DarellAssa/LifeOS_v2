@@ -67,6 +67,7 @@ export function AppSidebar() {
                         item.title === 'Tasks' ? 'nav-tasks' :
                         item.title === 'Calendar' ? 'nav-calendar' :
                         item.title === 'Goals' ? 'nav-goals' :
+                        item.title === 'Inbox' ? 'nav-inbox' :
                         item.title === 'Settings' ? 'nav-settings' :
                         undefined
                       }

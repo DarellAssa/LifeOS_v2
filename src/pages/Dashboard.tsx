@@ -341,7 +341,7 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Add */}
-      <Card>
+      <Card data-tour="quick-capture">
         <CardContent className="p-4">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary shrink-0" />
