@@ -8,6 +8,7 @@ import { generateNotifications, isQuietHours } from '@/lib/notifications';
 import { detectInboxContent, deriveTitle } from '@/lib/inbox';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchAllUserData, dbUpsertTask, dbDeleteTask, dbUpsertGoal, dbDeleteGoal, dbUpsertEvent, dbDeleteEvent, dbUpsertFocusBlock, dbDeleteFocusBlock, dbUpsertHabit, dbDeleteHabit, dbUpsertHabitLog, dbDeleteHabitLog, dbUpsertCheckIn, dbDeleteCheckIn, dbUpsertScore, dbUpsertWeeklyPlan, dbUpsertNotification, dbUpdateNotification, dbUpsertNotificationSettings, dbUpsertInboxItem, dbDeleteInboxItem, dbUpsertNote, dbDeleteNote, dbUpsertTemplate, dbDeleteTemplate, dbUpsertAutomationRule, dbDeleteAutomationRule, dbInsertAutomationLog, dbUpsertPinnedFocus } from '@/lib/db';
+import { dbInsertActivityLog } from '@/lib/activityLog';
 
 const SCHEMA_VERSION = 9;
 
@@ -201,7 +202,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Tasks ──
   const addTask = useCallback((task: Task) => {
     update(d => ({ ...d, tasks: [...d.tasks, task] }));
-    if (userId) dbUpsertTask(userId, task);
+    if (userId) {
+      dbUpsertTask(userId, task);
+      dbInsertActivityLog(userId, { source: 'user', action: 'created', entity_type: 'task', entity_id: task.id, title: task.title });
+    }
     toast({ title: 'Task created', description: task.title });
   }, [update, userId]);
 
@@ -215,15 +219,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [update, userId]);
 
   const deleteTask = useCallback((id: string) => {
+    const task = data.tasks.find(t => t.id === id);
     update(d => ({
       ...d,
       tasks: d.tasks.filter(t => t.id !== id),
       goals: d.goals.map(g => ({ ...g, linkedTaskIds: g.linkedTaskIds.filter(tid => tid !== id) })),
       focusBlocks: d.focusBlocks.map(fb => fb.linkedTaskId === id ? { ...fb, linkedTaskId: undefined } : fb),
     }));
-    if (userId) dbDeleteTask(userId, id);
+    if (userId) {
+      dbDeleteTask(userId, id);
+      dbInsertActivityLog(userId, { source: 'user', action: 'deleted', entity_type: 'task', entity_id: id, title: task?.title });
+    }
     toast({ title: 'Task deleted' });
-  }, [update, userId]);
+  }, [update, userId, data.tasks]);
 
   const toggleTaskDone = useCallback((id: string) => {
     update(d => ({
@@ -258,8 +266,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Goals ──
   const addGoal = useCallback((goal: Goal) => {
     update(d => ({ ...d, goals: [...d.goals, goal] }));
+    if (userId) {
+      dbUpsertGoal(userId, goal);
+      dbInsertActivityLog(userId, { source: 'user', action: 'created', entity_type: 'goal', entity_id: goal.id, title: goal.title });
+    }
     toast({ title: 'Goal created', description: goal.title });
-  }, [update]);
+  }, [update, userId]);
 
   const updateGoal = useCallback((id: string, updates: Partial<Goal>) => {
     update(d => ({ ...d, goals: d.goals.map(g => g.id === id ? { ...g, ...updates, updatedAt: new Date().toISOString() } : g) }));
@@ -334,8 +346,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Events ──
   const addEvent = useCallback((event: CalendarEvent) => {
     update(d => ({ ...d, events: [...d.events, { ...event, createdAt: event.createdAt || new Date().toISOString(), updatedAt: event.updatedAt || new Date().toISOString() }] }));
+    if (userId) {
+      dbUpsertEvent(userId, event);
+      dbInsertActivityLog(userId, { source: 'user', action: 'created', entity_type: 'event', entity_id: event.id, title: event.title });
+    }
     toast({ title: 'Event created', description: event.title });
-  }, [update]);
+  }, [update, userId]);
   const updateEvent = useCallback((id: string, updates: Partial<CalendarEvent>) =>
     update(d => ({ ...d, events: d.events.map(e => e.id === id ? { ...e, ...updates, updatedAt: new Date().toISOString() } : e) })), [update]);
   const deleteEvent = useCallback((id: string) => {
@@ -346,8 +362,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Focus Blocks ──
   const addFocusBlock = useCallback((block: FocusBlock) => {
     update(d => ({ ...d, focusBlocks: [...d.focusBlocks, block] }));
+    if (userId) {
+      dbUpsertFocusBlock(userId, block);
+      dbInsertActivityLog(userId, { source: 'user', action: 'created', entity_type: 'focus_block', entity_id: block.id, title: block.title });
+    }
     toast({ title: 'Focus block created', description: block.title });
-  }, [update]);
+  }, [update, userId]);
 
   const updateFocusBlock = useCallback((id: string, updates: Partial<FocusBlock>) => {
     update(d => ({ ...d, focusBlocks: d.focusBlocks.map(fb => fb.id === id ? { ...fb, ...updates, updatedAt: new Date().toISOString() } : fb) }));
@@ -397,8 +417,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Habits ──
   const addHabit = useCallback((habit: Habit) => {
     update(d => ({ ...d, habits: [...d.habits, habit] }));
+    if (userId) {
+      dbUpsertHabit(userId, habit);
+      dbInsertActivityLog(userId, { source: 'user', action: 'created', entity_type: 'habit', entity_id: habit.id, title: habit.title });
+    }
     toast({ title: 'Habit created', description: habit.title });
-  }, [update]);
+  }, [update, userId]);
   const updateHabit = useCallback((id: string, updates: Partial<Habit>) =>
     update(d => ({ ...d, habits: d.habits.map(h => h.id === id ? { ...h, ...updates, updatedAt: new Date().toISOString() } : h) })), [update]);
   const deleteHabit = useCallback((id: string) => { update(d => ({ ...d, habits: d.habits.filter(h => h.id !== id) })); toast({ title: 'Habit deleted' }); }, [update]);
@@ -714,8 +738,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (item && userId) dbUpsertInboxItem(userId, item);
       return { ...d, inboxItems: newItems };
     });
+    if (userId) {
+      const item = data.inboxItems.find(i => i.id === id);
+      dbInsertActivityLog(userId, { source: 'user', action: 'archived', entity_type: 'inbox', entity_id: id, title: item?.title });
+    }
     toast({ title: 'Archived' });
-  }, [update, userId]);
+  }, [update, userId, data.inboxItems]);
 
   const pinInboxItem = useCallback((id: string, pinned: boolean) => {
     update(d => {

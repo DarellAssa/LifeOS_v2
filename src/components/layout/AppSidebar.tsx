@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CheckSquare, Target, CalendarDays,
   Repeat, BarChart3, ClipboardList, Settings, Bell, Inbox, LayoutTemplate, Cog,
-  StickyNote, Zap, Heart, Activity,
+  StickyNote, Zap, Heart, Activity, History,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -26,6 +26,7 @@ const navItems: NavItem[] = [
   { title: 'Analytics', url: '/analytics', icon: BarChart3, module: 'analytics' },
   { title: 'Planning', url: '/planning', icon: ClipboardList, module: 'planning' },
   { title: 'Notifications', url: '/notifications', icon: Bell, module: 'notifications' },
+  { title: 'Activity', url: '/activity', icon: History },
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
 
