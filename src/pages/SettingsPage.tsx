@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppContext } from '@/store/AppContext';
+import { useAuth, DEFAULT_MODULES } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,9 +9,13 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, Upload, Trash2, CalendarDays, ExternalLink, Bell } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Download, Upload, Trash2, CalendarDays, ExternalLink, Bell, ChevronDown, RotateCcw, Eye, Sparkles } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { NotificationType } from '@/types';
+import { resetTourForUser } from '@/components/GuidedTour';
+import { dbDeleteDemoData } from '@/lib/db';
+import { useNavigate } from 'react-router-dom';
 
 const NOTIF_TYPE_LABELS: Record<NotificationType, string> = {
   task_overdue: 'Overdue tasks',
@@ -25,12 +30,73 @@ const NOTIF_TYPE_LABELS: Record<NotificationType, string> = {
   inbox_unprocessed: 'Unprocessed inbox items',
 };
 
+const MODULE_INFO: Record<string, { label: string; desc: string; advanced?: boolean }> = {
+  tasks: { label: 'Tasks', desc: 'Create, prioritize, and track tasks' },
+  goals: { label: 'Goals', desc: 'Long-term objectives with milestones' },
+  calendar: { label: 'Calendar', desc: 'Events and time-based views' },
+  focus: { label: 'Focus Blocks', desc: 'Time-blocked deep work sessions' },
+  habits: { label: 'Habits', desc: 'Daily/weekly habits with streaks' },
+  checkin: { label: 'Check-in', desc: 'Daily mood, energy, focus reflection' },
+  lifeScore: { label: 'Life Score', desc: 'Composite score from all activity' },
+  inbox: { label: 'Inbox', desc: 'Quick capture for thoughts and links' },
+  notes: { label: 'Notes', desc: 'Freeform notes with tags' },
+  analytics: { label: 'Analytics', desc: 'Charts and trends for your data' },
+  planning: { label: 'Weekly Planning', desc: 'Commit tasks per week' },
+  notifications: { label: 'Notifications', desc: 'In-app alerts and reminders' },
+  templates: { label: 'Templates', desc: 'Reusable task/event templates', advanced: true },
+  automations: { label: 'Automations', desc: 'Rules that run automatically', advanced: true },
+  copilot: { label: 'AI Copilot', desc: 'AI assistant for your workspace', advanced: true },
+};
+
 export default function SettingsPage() {
   const { data, updateProfile, exportData, importData, resetData, updateNotificationSettings, addNotification } = useAppContext();
-  const [name, setName] = useState(data.profile.name);
+  const { profile, updateProfile: updateAuthProfile, user } = useAuth();
+  const navigate = useNavigate();
+  const [name, setName] = useState(profile?.first_name || data.profile.name);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmDeleteDemo, setConfirmDeleteDemo] = useState(false);
   const [integrationModal, setIntegrationModal] = useState<string | null>(null);
+  const [advancedModulesOpen, setAdvancedModulesOpen] = useState(false);
   const settings = data.notificationSettings;
+
+  const modules = profile?.modules || DEFAULT_MODULES;
+
+  const handleModuleToggle = async (key: string, enabled: boolean) => {
+    const updated = { ...modules, [key]: enabled };
+    await updateAuthProfile({ modules: updated });
+  };
+
+  const handleNameSave = async () => {
+    updateProfile({ name });
+    await updateAuthProfile({ first_name: name || null });
+    toast({ title: 'Profile updated' });
+  };
+
+  const handleWeekStartChange = async (v: string) => {
+    updateProfile({ weekStartDay: v as 'monday' | 'sunday' });
+    await updateAuthProfile({ week_start: v === 'monday' ? 'mon' : 'sun' });
+  };
+
+  const handleReRunOnboarding = async () => {
+    await updateAuthProfile({ onboarding_completed: false });
+    navigate('/onboarding');
+  };
+
+  const handleResetTour = () => {
+    if (user) {
+      resetTourForUser(user.id);
+      toast({ title: 'Tour reset', description: 'The guided tour will appear on your next dashboard visit.' });
+    }
+  };
+
+  const handleDeleteDemoData = async () => {
+    if (!user) return;
+    await dbDeleteDemoData(user.id);
+    await updateAuthProfile({ demo_mode: false });
+    setConfirmDeleteDemo(false);
+    toast({ title: 'Demo data deleted', description: 'Refresh to see changes.' });
+    window.location.reload();
+  };
 
   const handleExport = () => {
     const json = exportData();
@@ -67,22 +133,31 @@ export default function SettingsPage() {
     toast({ title: 'Test notification created' });
   };
 
+  const coreModules = Object.entries(MODULE_INFO).filter(([, info]) => !info.advanced);
+  const advancedModules = Object.entries(MODULE_INFO).filter(([, info]) => info.advanced);
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
 
       <Tabs defaultValue="profile">
-        <TabsList><TabsTrigger value="profile">Profile</TabsTrigger><TabsTrigger value="notifications">Notifications</TabsTrigger><TabsTrigger value="data">Data</TabsTrigger><TabsTrigger value="integrations">Integrations</TabsTrigger><TabsTrigger value="help">Help</TabsTrigger></TabsList>
+        <TabsList>
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="modules">Modules</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="data">Data</TabsTrigger>
+          <TabsTrigger value="help">Help</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="profile" className="space-y-4 mt-4">
           <Card>
             <CardContent className="p-6 space-y-4">
               <div><Label>Name</Label>
                 <Input value={name} onChange={e => setName(e.target.value)}
-                  onBlur={() => { updateProfile({ name }); toast({ title: 'Profile updated' }); }} />
+                  onBlur={handleNameSave} />
               </div>
               <div><Label>Week starts on</Label>
-                <Select value={data.profile.weekStartDay} onValueChange={v => updateProfile({ weekStartDay: v as 'monday' | 'sunday' })}>
+                <Select value={data.profile.weekStartDay} onValueChange={handleWeekStartChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="monday">Monday</SelectItem><SelectItem value="sunday">Sunday</SelectItem></SelectContent>
                 </Select>
@@ -92,6 +167,88 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Getting Started */}
+          <Card>
+            <CardHeader><CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4" /> Getting Started</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <Button variant="outline" className="w-full justify-start" onClick={handleReRunOnboarding}>
+                <RotateCcw className="h-4 w-4 mr-2" /> Re-run onboarding
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={handleResetTour}>
+                <Eye className="h-4 w-4 mr-2" /> Reset guided tour
+              </Button>
+              {profile?.demo_mode && (
+                <>
+                  {!confirmDeleteDemo ? (
+                    <Button variant="outline" className="w-full justify-start text-destructive" onClick={() => setConfirmDeleteDemo(true)}>
+                      <Trash2 className="h-4 w-4 mr-2" /> Delete demo data
+                    </Button>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm text-destructive">This will remove all demo data. Your own data is safe.</p>
+                      <div className="flex gap-2">
+                        <Button variant="destructive" size="sm" onClick={handleDeleteDemoData}>Delete demo data</Button>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteDemo(false)}>Cancel</Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="modules" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Modules</CardTitle>
+              <p className="text-xs text-muted-foreground">Show or hide features. Your data is never deleted.</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {coreModules.map(([key, info]) => (
+                <div key={key} className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm">{info.label}</Label>
+                    <p className="text-[11px] text-muted-foreground">{info.desc}</p>
+                  </div>
+                  <Switch
+                    checked={modules[key] !== false}
+                    onCheckedChange={v => handleModuleToggle(key, v)}
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Collapsible open={advancedModulesOpen} onOpenChange={setAdvancedModulesOpen}>
+            <Card>
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="cursor-pointer">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    Advanced
+                    <ChevronDown className={`h-4 w-4 transition-transform ${advancedModulesOpen ? 'rotate-180' : ''}`} />
+                  </CardTitle>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-3 pt-0">
+                  {advancedModules.map(([key, info]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-sm">{info.label}</Label>
+                        <p className="text-[11px] text-muted-foreground">{info.desc}</p>
+                      </div>
+                      <Switch
+                        checked={modules[key] !== false}
+                        onCheckedChange={v => handleModuleToggle(key, v)}
+                      />
+                    </div>
+                  ))}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-4 mt-4">
@@ -189,48 +346,29 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="integrations" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader><CardTitle className="text-base flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Calendar Integrations</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">Connect your external calendars to sync events automatically.</p>
-              <Button variant="outline" className="w-full justify-start" onClick={() => setIntegrationModal('Google Calendar')}>
-                <ExternalLink className="h-4 w-4 mr-2" /> Connect Google Calendar
-              </Button>
-              <Button variant="outline" className="w-full justify-start" onClick={() => setIntegrationModal('Outlook')}>
-                <ExternalLink className="h-4 w-4 mr-2" /> Connect Outlook
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="help" className="space-y-4 mt-4">
           <Card>
             <CardContent className="p-6 space-y-4 text-sm">
               <h3 className="font-semibold text-base">How to use LifeOS</h3>
               <div className="space-y-3">
-                <div><p className="font-medium">📋 Tasks</p><p className="text-muted-foreground">Create tasks with priorities and due dates. Use List, Kanban (drag & drop), Week, and Overdue views. Schedule tasks to create focus blocks.</p></div>
-                <div><p className="font-medium">🎯 Goals</p><p className="text-muted-foreground">Set long-term goals with target dates and track progress. Link tasks to goals.</p></div>
-                <div><p className="font-medium">📅 Calendar</p><p className="text-muted-foreground">Manage events and focus blocks. Day, Week, Month, and Agenda views with timeline rendering. Quick-schedule tasks directly from the agenda.</p></div>
-                <div><p className="font-medium">⚡ Focus Blocks</p><p className="text-muted-foreground">Time-block work sessions linked to tasks and goals. Track planned vs completed focus minutes.</p></div>
-                <div><p className="font-medium">🔁 Habits</p><p className="text-muted-foreground">Create daily/weekly habits. Log completions and build streaks.</p></div>
-                <div><p className="font-medium">🔔 Notifications</p><p className="text-muted-foreground">In-app alerts for overdue tasks, behind goals, missed habits, and upcoming events. Configure quiet hours and alert preferences in Settings.</p></div>
-                <div><p className="font-medium">📊 Analytics</p><p className="text-muted-foreground">View task completion trends, focus analytics, goal progress, and habit adherence.</p></div>
-                <div><p className="font-medium">📝 Weekly Planning</p><p className="text-muted-foreground">Commit up to 10 tasks per week. View scoreboard and carry over overdue tasks.</p></div>
-                <div><p className="font-medium">⌘K Command Palette</p><p className="text-muted-foreground">Press ⌘K (or Ctrl+K) to quickly navigate or create tasks/events/goals.</p></div>
+                <div><p className="font-medium">📋 Tasks</p><p className="text-muted-foreground">Create tasks with priorities and due dates. Use List, Kanban, Week, and Overdue views.</p></div>
+                <div><p className="font-medium">🎯 Goals</p><p className="text-muted-foreground">Set long-term goals with target dates and track progress.</p></div>
+                <div><p className="font-medium">📅 Calendar</p><p className="text-muted-foreground">Manage events and focus blocks with multiple views.</p></div>
+                <div><p className="font-medium">🔁 Habits</p><p className="text-muted-foreground">Create daily/weekly habits and build streaks.</p></div>
+                <div><p className="font-medium">🔔 Notifications</p><p className="text-muted-foreground">In-app alerts for overdue tasks, behind goals, and more.</p></div>
+                <div><p className="font-medium">📊 Analytics</p><p className="text-muted-foreground">View trends and patterns across all your data.</p></div>
+                <div><p className="font-medium">⌘K Command Palette</p><p className="text-muted-foreground">Press ⌘K to quickly navigate or create items.</p></div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Integration Coming Soon Modal */}
       <Dialog open={!!integrationModal} onOpenChange={() => setIntegrationModal(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Integration Coming Soon</DialogTitle></DialogHeader>
           <div className="space-y-3 text-sm">
             <p><strong>{integrationModal}</strong> integration is not yet available.</p>
-            <p className="text-muted-foreground">We're working on calendar sync with external providers. In the meantime, you can manually create events and focus blocks directly in LifeOS.</p>
             <Button variant="outline" className="w-full" onClick={() => setIntegrationModal(null)}>Got it</Button>
           </div>
         </DialogContent>

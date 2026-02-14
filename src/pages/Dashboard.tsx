@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '@/store/AppContext';
+import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +35,7 @@ export default function Dashboard() {
     getCheckInForDate, upsertDailyCheckIn, generateLifeScoreForDate, getLifeScoreForDate,
     markNotificationRead,
   } = useAppContext();
+  const { profile, isModuleEnabled } = useAuth();
   const navigate = useNavigate();
   const { tasks, goals, habits } = data;
 
@@ -114,6 +116,7 @@ export default function Dashboard() {
   }, [todayTasks, overdue]);
 
   const hour = now.getHours();
+  const userName = profile?.first_name || 'there';
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
 
   // ── Check-in & Life Score ──
@@ -127,14 +130,17 @@ export default function Dashboard() {
   const [ciBlockers, setCiBlockers] = useState(todayCheckIn?.blockers ?? '');
   const [ciGratitude, setCiGratitude] = useState(todayCheckIn?.gratitude ?? '');
 
-  // Auto-generate life score on first dashboard load per day
+  // Check if user has no data (empty state) - define early for use below
+  const hasNoData = tasks.length === 0 && goals.length === 0 && habits.length === 0 && data.events.length === 0;
+
+  // Auto-generate life score on first dashboard load per day (only if user has data)
   const todayScore = getLifeScoreForDate(todayStr);
   useEffect(() => {
-    if (!todayScore) {
+    if (!todayScore && !hasNoData) {
       generateLifeScoreForDate(todayStr);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [todayStr]);
+  }, [todayStr, hasNoData]);
 
   const currentScore = todayScore || { score: 0, breakdown: { tasks: 0, focus: 0, habits: 0, goals: 0 } };
 
@@ -196,12 +202,50 @@ export default function Dashboard() {
     return parts.length > 0 ? `Today: ${parts.join(', ')}` : null;
   }, [overdue, behindGoals, habits, todayStr]);
 
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Good {greeting}, {data.profile.name}</h1>
+      <div data-tour="greeting">
+        <h1 className="text-2xl font-bold tracking-tight">Good {greeting}, {userName}</h1>
         <p className="text-muted-foreground text-sm mt-1">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
+
+      {/* Empty state for new users */}
+      {hasNoData && (
+        <Card className="border-dashed">
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold">Welcome to your LifeOS.</h2>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Start with one small action — your system builds itself.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-3">
+              {isModuleEnabled('tasks') && (
+                <Button variant="outline" onClick={() => navigate('/tasks')}>
+                  <CheckSquare className="h-4 w-4 mr-2" /> Add a task
+                </Button>
+              )}
+              {isModuleEnabled('inbox') && (
+                <Button variant="outline" onClick={() => navigate('/inbox')}>
+                  <Inbox className="h-4 w-4 mr-2" /> Capture to inbox
+                </Button>
+              )}
+              {isModuleEnabled('goals') && (
+                <Button variant="outline" onClick={() => navigate('/goals')}>
+                  <Target className="h-4 w-4 mr-2" /> Create a goal
+                </Button>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Nothing here is pre-filled. LifeOS starts clean by design.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!hasNoData && (
+        <>
 
       {/* Daily Digest Banner */}
       {dailyDigest && (
@@ -553,6 +597,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+      </>
+      )}
 
       {/* Check-in Modal */}
       <Dialog open={checkInOpen} onOpenChange={setCheckInOpen}>
