@@ -13,7 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Download, Upload, Trash2, CalendarDays, ExternalLink, Bell, ChevronDown, RotateCcw, Eye, Sparkles } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { NotificationType } from '@/types';
-import { resetTourForUser } from '@/components/GuidedTour';
+import { resetTourForUser, isTourDebugEnabled, setTourDebugEnabled } from '@/components/GuidedTour';
 import { dbDeleteDemoData } from '@/lib/db';
 import { useNavigate } from 'react-router-dom';
 
@@ -57,6 +57,7 @@ export default function SettingsPage() {
   const [confirmDeleteDemo, setConfirmDeleteDemo] = useState(false);
   const [integrationModal, setIntegrationModal] = useState<string | null>(null);
   const [advancedModulesOpen, setAdvancedModulesOpen] = useState(false);
+  const [tourDebug, setTourDebug] = useState(isTourDebugEnabled());
   const settings = data.notificationSettings;
 
   const modules = profile?.modules || DEFAULT_MODULES;
@@ -178,6 +179,16 @@ export default function SettingsPage() {
               <Button variant="outline" className="w-full justify-start" onClick={handleResetTour}>
                 <Eye className="h-4 w-4 mr-2" /> Reset guided tour
               </Button>
+              <div className="flex items-center justify-between px-1">
+                <div>
+                  <Label className="text-sm">Tour debug mode</Label>
+                  <p className="text-[11px] text-muted-foreground">Show diagnostic panel during tour</p>
+                </div>
+                <Switch
+                  checked={tourDebug}
+                  onCheckedChange={v => { setTourDebug(v); setTourDebugEnabled(v); }}
+                />
+              </div>
               {profile?.demo_mode && (
                 <>
                   {!confirmDeleteDemo ? (
