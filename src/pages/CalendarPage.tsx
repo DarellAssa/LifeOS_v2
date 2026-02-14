@@ -252,9 +252,9 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4">
+    <div className="max-w-6xl mx-auto space-y-4" data-tour="calendar-root">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" data-tour="calendar-header">
         <h1 className="text-2xl font-bold tracking-tight">Calendar</h1>
         <div className="flex items-center gap-2">
           <div className="flex rounded-md border border-border overflow-hidden">
@@ -265,7 +265,7 @@ export default function CalendarPage() {
             ))}
           </div>
           <Button size="sm" variant="outline" onClick={goToday}>Today</Button>
-          <div className="flex gap-1">
+          <div className="flex gap-1" data-tour="calendar-primary-action">
             <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => openNewDialog('event')}>
               <Plus className="h-4 w-4" />
             </Button>

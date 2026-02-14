@@ -68,29 +68,35 @@ export function AppLayout() {
     if (isModuleEnabled('calendar') || isModuleEnabled('focus')) {
       steps.push({
         id: 'calendar',
-        targetSelector: '[data-tour="nav-calendar"]',
+        targetSelector: '[data-tour="calendar-header"]',
+        targetSelectorFallbacks: ['[data-tour="calendar-primary-action"]', '[data-tour="calendar-root"]'],
         title: 'Schedule focus, not just tasks',
         body: 'Time-block deep work so plans actually happen. Start with one 30–60 min block.',
-        placement: 'right',
+        placement: 'bottom',
+        route: '/calendar',
       });
     }
 
     if (isModuleEnabled('goals')) {
       steps.push({
         id: 'goals',
-        targetSelector: '[data-tour="nav-goals"]',
+        targetSelector: '[data-tour="goals-header"]',
+        targetSelectorFallbacks: ['[data-tour="goals-primary-action"]', '[data-tour="goals-root"]'],
         title: 'Goals keep you pointed forward',
         body: 'Link tasks to goals and see what\'s on track — without overthinking it.',
-        placement: 'right',
+        placement: 'bottom',
+        route: '/goals',
       });
     }
 
     steps.push({
       id: 'settings',
-      targetSelector: '[data-tour="nav-settings"]',
+      targetSelector: '[data-tour="settings-header"]',
+      targetSelectorFallbacks: ['[data-tour="modules-section"]', '[data-tour="settings-root"]'],
       title: 'You control the system',
       body: 'Enable or hide modules anytime. Nothing is permanent — LifeOS adapts to you.',
-      placement: 'right',
+      placement: 'bottom',
+      route: '/settings',
     });
 
     return steps;
