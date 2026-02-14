@@ -8,12 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import {
   Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle,
   Sparkles, ShieldCheck, X, Plus, MessageSquare, Trash2, Bug,
-  ListChecks, Play, CheckCircle2, XCircle, Edit3,
+  ListChecks, Play, CheckCircle2, XCircle, Edit3, Clock, AlertTriangle, Calendar,
 } from 'lucide-react';
 import { useAppContext } from '@/store/AppContext';
 import {
   CopilotMessage, CopilotThread, CopilotPlan, PendingConfirmation, ToolRun,
-  CopilotMode, sendCopilotMessage, confirmCopilotAction, approvePlan, cancelPlan,
+  CopilotMode, ScheduleOperation, ScheduleConflict,
+  sendCopilotMessage, confirmCopilotAction, approvePlan, cancelPlan,
   loadThreads, loadThreadMessages, deleteThread,
 } from '@/lib/copilot';
 import ReactMarkdown from 'react-markdown';
@@ -22,6 +23,111 @@ interface CopilotDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialMessage?: string;
+}
+
+// ── Format time for display ──
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  } catch { return iso; }
+}
+function formatDuration(startIso: string, endIso: string): string {
+  try {
+    const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
+    const mins = Math.round(ms / 60000);
+    if (mins < 60) return `${mins}m`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  } catch { return ''; }
+}
+
+// ── Schedule Preview Card ──
+function SchedulePreviewCard({
+  operations,
+  conflicts,
+  alternatives,
+  onSelectAlternative,
+}: {
+  operations?: ScheduleOperation[] | null;
+  conflicts?: ScheduleConflict[] | null;
+  alternatives?: { start_at: string; end_at: string; reason: string }[] | null;
+  onSelectAlternative?: (alt: { start_at: string; end_at: string }) => void;
+}) {
+  if (!operations || operations.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-2 mt-1">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+        <Calendar className="h-3.5 w-3.5 text-primary" />
+        Schedule Preview
+      </div>
+
+      {/* Operations timeline */}
+      <div className="space-y-1.5">
+        {operations.map((op, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs">
+            <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded ${
+              op.op === 'create' ? 'bg-primary/10 text-primary' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+            }`}>
+              {op.op.toUpperCase()}
+            </span>
+            <span className="capitalize text-muted-foreground">{op.kind}:</span>
+            <span className="font-medium truncate flex-1">{op.title}</span>
+          </div>
+        ))}
+        {operations.map((op, i) => (
+          <div key={`time-${i}`} className="flex items-center gap-2 text-[11px] text-muted-foreground pl-1">
+            <Clock className="h-3 w-3" />
+            <span>{formatDate(op.start_at)} {formatTime(op.start_at)}–{formatTime(op.end_at)}</span>
+            <span className="text-[10px]">({formatDuration(op.start_at, op.end_at)})</span>
+            {op.recurrence && (
+              <Badge variant="outline" className="text-[9px] h-4">Recurring</Badge>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Conflicts */}
+      {conflicts && conflicts.length > 0 && (
+        <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 space-y-1">
+          <div className="flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="h-3 w-3" />
+            {conflicts.length} conflict{conflicts.length > 1 ? 's' : ''} detected
+          </div>
+          {conflicts.map((c, i) => (
+            <div key={i} className="text-[10px] text-muted-foreground pl-4">
+              • {c.title} ({formatTime(c.start_at)}–{formatTime(c.end_at)})
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Alternatives */}
+      {alternatives && alternatives.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[10px] text-muted-foreground font-medium">Suggested alternatives:</p>
+          {alternatives.map((alt, i) => (
+            <button
+              key={i}
+              onClick={() => onSelectAlternative?.(alt)}
+              className="w-full text-left rounded border border-border hover:border-primary/40 hover:bg-primary/5 p-1.5 text-[10px] transition-colors"
+            >
+              <span className="font-medium">{formatDate(alt.start_at)} {formatTime(alt.start_at)}–{formatTime(alt.end_at)}</span>
+              <span className="text-muted-foreground ml-1">— {alt.reason}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Plan Preview Card ──
@@ -45,6 +151,8 @@ function PlanPreviewCard({
   const isCancelled = plan.approved === false;
   const isPending = plan.approved === undefined;
 
+  const hasScheduleOps = plan.schedule_operations && plan.schedule_operations.length > 0;
+
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2.5">
       {/* Header */}
@@ -55,6 +163,15 @@ function PlanPreviewCard({
           {plan.steps.length} step{plan.steps.length > 1 ? 's' : ''}
         </Badge>
       </div>
+
+      {/* Schedule preview (if scheduling plan) */}
+      {hasScheduleOps && (
+        <SchedulePreviewCard
+          operations={plan.schedule_operations}
+          conflicts={plan.schedule_conflicts}
+          alternatives={plan.schedule_alternatives}
+        />
+      )}
 
       {/* Steps */}
       <div className="space-y-1.5">
@@ -334,7 +451,6 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
     const msg = messages[msgIndex];
     if (!msg.pendingPlan || !activeThreadId) return;
 
-    // Mark plan as approved
     setMessages(prev => prev.map((m, i) =>
       i === msgIndex ? { ...m, pendingPlan: { ...m.pendingPlan!, approved: true } } : m
     ));
@@ -381,7 +497,6 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
   }, [activeThreadId]);
 
   const handleEditPlan = useCallback((msgIndex: number) => {
-    // Focus input for refinement, mark plan as cancelled
     setMessages(prev => prev.map((m, i) =>
       i === msgIndex ? { ...m, pendingPlan: { ...m.pendingPlan!, approved: false } } : m
     ));
@@ -556,7 +671,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {mode === 'plan_do'
-                    ? ['Create 3 tasks for my thesis', 'Triage my inbox', 'Schedule focus time tomorrow'].map(s => (
+                    ? ['Create 3 tasks for my thesis', 'Block 90min tomorrow for deep work', 'Schedule gym every weekday at 8am'].map(s => (
                         <button key={s} onClick={() => sendMessage(s)}
                           className="text-xs px-3 py-1.5 rounded-full border border-border hover:bg-muted/50 transition-colors text-muted-foreground">
                           {s}

@@ -44,6 +44,27 @@ export interface PlanStep {
   expected_impact: { creates: number; updates: number; deletes: number };
 }
 
+export interface ScheduleOperation {
+  op: 'create' | 'update' | 'noop';
+  kind: 'event' | 'focus';
+  title: string;
+  start_at: string;
+  end_at: string;
+  recurrence?: { rrule?: string; count?: number; until?: string } | null;
+  route: string;
+  risk: 'low' | 'medium' | 'high';
+  target_id?: string;
+}
+
+export interface ScheduleConflict {
+  kind: 'event' | 'focus';
+  id: string;
+  title: string;
+  start_at: string;
+  end_at: string;
+  route: string;
+}
+
 export interface CopilotPlan {
   title: string;
   goal: string;
@@ -51,6 +72,9 @@ export interface CopilotPlan {
   overall_impact: { creates: number; updates: number; deletes: number };
   assumptions: string[];
   questions: string[];
+  schedule_operations?: ScheduleOperation[] | null;
+  schedule_conflicts?: ScheduleConflict[] | null;
+  schedule_alternatives?: { start_at: string; end_at: string; reason: string }[] | null;
   approved?: boolean; // undefined = pending, true = approved, false = cancelled
 }
 
