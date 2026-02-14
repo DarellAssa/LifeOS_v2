@@ -1,6 +1,7 @@
 import {
   LayoutDashboard, CheckSquare, Target, CalendarDays,
   Repeat, BarChart3, ClipboardList, Settings, Bell, Inbox, LayoutTemplate, Cog,
+  StickyNote, Zap, Heart, Activity,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -8,20 +9,23 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from '@/components/ui/sidebar';
 import { useAppContext } from '@/store/AppContext';
+import { useAuth } from '@/hooks/useAuth';
 import { Badge } from '@/components/ui/badge';
 
-const navItems = [
+type NavItem = { title: string; url: string; icon: any; module?: string };
+
+const navItems: NavItem[] = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'Tasks', url: '/tasks', icon: CheckSquare },
-  { title: 'Goals', url: '/goals', icon: Target },
-  { title: 'Calendar', url: '/calendar', icon: CalendarDays },
-  { title: 'Habits', url: '/habits', icon: Repeat },
-  { title: 'Inbox', url: '/inbox', icon: Inbox },
-  { title: 'Templates', url: '/templates', icon: LayoutTemplate },
-  { title: 'Automations', url: '/automations', icon: Cog },
-  { title: 'Analytics', url: '/analytics', icon: BarChart3 },
-  { title: 'Planning', url: '/planning', icon: ClipboardList },
-  { title: 'Notifications', url: '/notifications', icon: Bell },
+  { title: 'Tasks', url: '/tasks', icon: CheckSquare, module: 'tasks' },
+  { title: 'Goals', url: '/goals', icon: Target, module: 'goals' },
+  { title: 'Calendar', url: '/calendar', icon: CalendarDays, module: 'calendar' },
+  { title: 'Habits', url: '/habits', icon: Repeat, module: 'habits' },
+  { title: 'Inbox', url: '/inbox', icon: Inbox, module: 'inbox' },
+  { title: 'Templates', url: '/templates', icon: LayoutTemplate, module: 'templates' },
+  { title: 'Automations', url: '/automations', icon: Cog, module: 'automations' },
+  { title: 'Analytics', url: '/analytics', icon: BarChart3, module: 'analytics' },
+  { title: 'Planning', url: '/planning', icon: ClipboardList, module: 'planning' },
+  { title: 'Notifications', url: '/notifications', icon: Bell, module: 'notifications' },
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
 
@@ -29,10 +33,16 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const { data } = useAppContext();
+  const { isModuleEnabled } = useAuth();
   const inboxCount = data.inboxItems.filter(i => i.status === 'unprocessed').length;
 
+  const visibleItems = navItems.filter(item => {
+    if (!item.module) return true; // always show Dashboard, Settings
+    return isModuleEnabled(item.module);
+  });
+
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border" data-tour="sidebar">
       <div className="flex h-14 items-center px-4 border-b border-sidebar-border">
         {!collapsed && (
           <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
@@ -45,7 +55,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
+              {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink

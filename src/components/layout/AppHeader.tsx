@@ -1,9 +1,10 @@
-import { Search, Moon, Sun, Bell, Sparkles } from 'lucide-react';
+import { Search, Moon, Sun, Bell, Sparkles, User, LogOut, Settings as SettingsIcon } from 'lucide-react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useTheme } from '@/hooks/useTheme';
 import { useAppContext } from '@/store/AppContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
@@ -16,10 +17,13 @@ interface AppHeaderProps {
 
 export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }: AppHeaderProps) {
   const { theme, toggleTheme } = useTheme();
-  const { data, markNotificationRead, getUnreadNotificationCount, addInboxItem } = useAppContext();
+  const { data, markNotificationRead, getUnreadNotificationCount } = useAppContext();
+  const { profile, signOut, isModuleEnabled } = useAuth();
   const navigate = useNavigate();
   const [bellOpen, setBellOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const bellRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   const unreadCount = getUnreadNotificationCount();
 
@@ -30,19 +34,25 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setBellOpen(false);
-      }
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) setBellOpen(false);
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
     };
-    if (bellOpen) document.addEventListener('mousedown', handleClick);
+    if (bellOpen || profileOpen) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [bellOpen]);
+  }, [bellOpen, profileOpen]);
+
+  const handleSignOut = async () => {
+    setProfileOpen(false);
+    await signOut();
+    navigate('/auth');
+  };
 
   return (
     <header className="flex h-14 items-center gap-4 border-b border-border bg-background px-4">
       <SidebarTrigger className="shrink-0" />
       <div className="flex flex-1 items-center gap-2">
         <button
+          data-tour="search"
           onClick={onOpenSearch}
           className="flex h-9 w-full max-w-sm items-center gap-2 rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted"
         >
@@ -55,7 +65,7 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
       </div>
 
       {/* Notification Bell */}
-      <div className="relative" ref={dropdownRef}>
+      <div className="relative" ref={bellRef}>
         <Button variant="ghost" size="icon" onClick={() => setBellOpen(!bellOpen)} className="shrink-0 relative">
           <Bell className="h-4 w-4" />
           {unreadCount > 0 && (
@@ -94,13 +104,40 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
         )}
       </div>
 
-      <Button variant="ghost" size="icon" onClick={onOpenCopilot} className="shrink-0" title="Open Copilot (Ctrl+J)">
-        <Sparkles className="h-4 w-4" />
-      </Button>
+      {isModuleEnabled('copilot') && (
+        <Button variant="ghost" size="icon" onClick={onOpenCopilot} className="shrink-0" title="Open Copilot (Ctrl+J)">
+          <Sparkles className="h-4 w-4" />
+        </Button>
+      )}
 
       <Button variant="ghost" size="icon" onClick={toggleTheme} className="shrink-0">
         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </Button>
+
+      {/* Profile Menu */}
+      <div className="relative" ref={profileRef}>
+        <Button variant="ghost" size="icon" onClick={() => setProfileOpen(!profileOpen)} className="shrink-0">
+          <User className="h-4 w-4" />
+        </Button>
+        {profileOpen && (
+          <div className="absolute right-0 top-full mt-2 w-56 rounded-lg border border-border bg-background shadow-lg z-50">
+            <div className="p-3 border-b border-border">
+              <p className="text-sm font-medium truncate">{profile?.first_name || 'User'}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{profile?.email}</p>
+            </div>
+            <div className="p-1">
+              <button onClick={() => { setProfileOpen(false); navigate('/settings'); }}
+                className="flex items-center gap-2 w-full rounded-md px-3 py-2 text-sm hover:bg-muted/50 transition-colors">
+                <SettingsIcon className="h-4 w-4" /> Settings
+              </button>
+              <button onClick={handleSignOut}
+                className="flex items-center gap-2 w-full rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
+                <LogOut className="h-4 w-4" /> Sign out
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </header>
   );
 }
