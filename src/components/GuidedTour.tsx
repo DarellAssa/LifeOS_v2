@@ -1,9 +1,17 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { X, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export interface TourStep {
   id: string;
@@ -44,52 +52,87 @@ export function resetTourForUser(userId: string) {
   } catch {}
 }
 
-interface SpotlightRect {
+interface Rect {
   top: number;
   left: number;
   width: number;
   height: number;
 }
 
-interface TooltipPos {
-  top: number;
-  left: number;
+type ResolvedPlacement = 'top' | 'bottom' | 'left' | 'right';
+
+const TOOLTIP_MAX_W = 360;
+const GAP = 14;
+const SPOT_PAD = 6;
+
+function resolvePlacement(
+  rect: Rect,
+  preferred: ResolvedPlacement,
+  tw: number,
+  th: number,
+): ResolvedPlacement {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const fits = (p: ResolvedPlacement) => {
+    switch (p) {
+      case 'right': return rect.left + rect.width + GAP + tw < vw - 12;
+      case 'bottom': return rect.top + rect.height + GAP + th < vh - 12;
+      case 'left': return rect.left - GAP - tw > 12;
+      case 'top': return rect.top - GAP - th > 12;
+    }
+  };
+  if (fits(preferred)) return preferred;
+  const fallbacks: ResolvedPlacement[] = ['right', 'bottom', 'left', 'top'];
+  return fallbacks.find(fits) ?? 'bottom';
 }
 
-function computeTooltipPosition(
-  rect: SpotlightRect,
-  placement: 'top' | 'bottom' | 'left' | 'right',
-  tooltipW: number,
-  tooltipH: number,
-  gap: number = 12
-): TooltipPos {
+function computePos(
+  rect: Rect,
+  placement: ResolvedPlacement,
+  tw: number,
+  th: number,
+): { top: number; left: number; arrowSide: ResolvedPlacement; arrowOffset: number } {
   let top = 0;
   let left = 0;
 
   switch (placement) {
-    case 'bottom':
-      top = rect.top + rect.height + gap;
-      left = rect.left + rect.width / 2 - tooltipW / 2;
-      break;
-    case 'top':
-      top = rect.top - tooltipH - gap;
-      left = rect.left + rect.width / 2 - tooltipW / 2;
-      break;
     case 'right':
-      top = rect.top + rect.height / 2 - tooltipH / 2;
-      left = rect.left + rect.width + gap;
+      top = rect.top + rect.height / 2 - th / 2;
+      left = rect.left + rect.width + GAP;
       break;
     case 'left':
-      top = rect.top + rect.height / 2 - tooltipH / 2;
-      left = rect.left - tooltipW - gap;
+      top = rect.top + rect.height / 2 - th / 2;
+      left = rect.left - tw - GAP;
+      break;
+    case 'bottom':
+      top = rect.top + rect.height + GAP;
+      left = rect.left + rect.width / 2 - tw / 2;
+      break;
+    case 'top':
+      top = rect.top - th - GAP;
+      left = rect.left + rect.width / 2 - tw / 2;
       break;
   }
 
-  // Clamp to viewport
-  left = Math.max(12, Math.min(left, window.innerWidth - tooltipW - 12));
-  top = Math.max(12, Math.min(top, window.innerHeight - tooltipH - 12));
+  // Clamp
+  left = Math.max(12, Math.min(left, window.innerWidth - tw - 12));
+  top = Math.max(12, Math.min(top, window.innerHeight - th - 12));
 
-  return { top, left };
+  // Arrow points back toward target center
+  const arrowSide: ResolvedPlacement =
+    placement === 'right' ? 'left' :
+    placement === 'left' ? 'right' :
+    placement === 'bottom' ? 'top' : 'bottom';
+
+  // Arrow offset along the edge (in px from top/left of tooltip)
+  let arrowOffset: number;
+  if (placement === 'right' || placement === 'left') {
+    arrowOffset = Math.max(16, Math.min(rect.top + rect.height / 2 - top, th - 16));
+  } else {
+    arrowOffset = Math.max(16, Math.min(rect.left + rect.width / 2 - left, tw - 16));
+  }
+
+  return { top, left, arrowSide, arrowOffset };
 }
 
 export function GuidedTour({ steps }: { steps: TourStep[] }) {
@@ -99,13 +142,15 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [visible, setVisible] = useState(false);
   const [showEndScreen, setShowEndScreen] = useState(false);
-  const [spotlight, setSpotlight] = useState<SpotlightRect | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<TooltipPos>({ top: 0, left: 0 });
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
+  const [spotlight, setSpotlight] = useState<Rect | null>(null);
+  const [tooltipStyle, setTooltipStyle] = useState<{
+    top: number; left: number; arrowSide: ResolvedPlacement; arrowOffset: number;
+  } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const TOOLTIP_W = 320;
-  const TOOLTIP_H = 180;
-  const PAD = 8;
+  const retryRef = useRef<number>(0);
 
+  // Start tour
   useEffect(() => {
     if (!user || !profile) return;
     const showTour = profile.preferences?.showTutorial !== false;
@@ -115,63 +160,80 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
     }
   }, [user, profile, steps.length]);
 
-  const updateSpotlight = useCallback(() => {
+  const positionTooltip = useCallback(() => {
     if (!visible || showEndScreen || currentStep >= steps.length) {
       setSpotlight(null);
+      setTooltipStyle(null);
       return;
     }
     const step = steps[currentStep];
     const el = document.querySelector(step.targetSelector);
     if (!el) {
-      setSpotlight(null);
-      // Center tooltip
-      setTooltipPos({
-        top: window.innerHeight / 2 - TOOLTIP_H / 2,
-        left: window.innerWidth / 2 - TOOLTIP_W / 2,
-      });
+      // If route needed, navigate
+      if (step.route && location.pathname !== step.route && retryRef.current < 2) {
+        retryRef.current++;
+        navigate(step.route);
+        return;
+      }
+      // Skip this step
+      if (currentStep < steps.length - 1) {
+        setCurrentStep(prev => prev + 1);
+      } else {
+        setShowEndScreen(true);
+      }
       return;
     }
 
+    retryRef.current = 0;
     el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-    // Small delay after scroll
     requestAnimationFrame(() => {
-      const rect = el.getBoundingClientRect();
-      const sr: SpotlightRect = {
-        top: rect.top - PAD,
-        left: rect.left - PAD,
-        width: rect.width + PAD * 2,
-        height: rect.height + PAD * 2,
+      const r = el.getBoundingClientRect();
+      const sr: Rect = {
+        top: r.top - SPOT_PAD,
+        left: r.left - SPOT_PAD,
+        width: r.width + SPOT_PAD * 2,
+        height: r.height + SPOT_PAD * 2,
       };
       setSpotlight(sr);
-      setTooltipPos(computeTooltipPosition(sr, step.placement, TOOLTIP_W, TOOLTIP_H));
-    });
-  }, [visible, showEndScreen, currentStep, steps]);
 
-  // Navigate to route if needed
+      const tw = Math.min(TOOLTIP_MAX_W, window.innerWidth - 24);
+      const th = tooltipRef.current?.offsetHeight ?? 160;
+      const placement = resolvePlacement(sr, step.placement, tw, th);
+      setTooltipStyle(computePos(sr, placement, tw, th));
+    });
+  }, [visible, showEndScreen, currentStep, steps, location.pathname, navigate]);
+
+  // Reposition on step/route changes
   useEffect(() => {
-    if (!visible || showEndScreen || currentStep >= steps.length) return;
-    const step = steps[currentStep];
-    if (step.route && location.pathname !== step.route) {
-      navigate(step.route);
-      // Delay spotlight after navigation
-      const timer = setTimeout(updateSpotlight, 500);
-      return () => clearTimeout(timer);
-    } else {
-      const timer = setTimeout(updateSpotlight, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [visible, showEndScreen, currentStep, steps, location.pathname, navigate, updateSpotlight]);
+    if (!visible || showEndScreen) return;
+    const timer = setTimeout(positionTooltip, 200);
+    return () => clearTimeout(timer);
+  }, [visible, showEndScreen, currentStep, location.pathname, positionTooltip]);
 
   useEffect(() => {
     if (!visible) return;
-    window.addEventListener('resize', updateSpotlight);
-    return () => window.removeEventListener('resize', updateSpotlight);
-  }, [visible, updateSpotlight]);
+    window.addEventListener('resize', positionTooltip);
+    return () => window.removeEventListener('resize', positionTooltip);
+  }, [visible, positionTooltip]);
+
+  // Escape key
+  useEffect(() => {
+    if (!visible) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSkipConfirm(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [visible]);
 
   const handleClose = () => {
     setVisible(false);
     setShowEndScreen(false);
+    setShowSkipConfirm(false);
     if (user) markTourCompleted(user.id);
   };
 
@@ -181,6 +243,7 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
     } else {
       setShowEndScreen(true);
       setSpotlight(null);
+      setTooltipStyle(null);
     }
   };
 
@@ -197,67 +260,40 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
 
   const step = steps[currentStep];
   const isLast = currentStep === steps.length - 1;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
 
-  // SVG overlay with spotlight cutout
-  const renderOverlay = () => {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+  // Arrow component
+  const Arrow = ({ side, offset }: { side: ResolvedPlacement; offset: number }) => {
+    const size = 8;
+    const style: React.CSSProperties = { position: 'absolute' };
+    let points = '';
 
-    if (!spotlight || showEndScreen) {
-      return (
-        <div
-          className="fixed inset-0 z-[9998] bg-background/60 backdrop-blur-[2px]"
-          onClick={handleClose}
-        />
-      );
+    if (side === 'left') {
+      style.left = -size;
+      style.top = offset - size;
+      points = `${size},0 ${size},${size * 2} 0,${size}`;
+    } else if (side === 'right') {
+      style.right = -size;
+      style.top = offset - size;
+      points = `0,0 0,${size * 2} ${size},${size}`;
+    } else if (side === 'top') {
+      style.top = -size;
+      style.left = offset - size;
+      points = `0,${size} ${size},0 ${size * 2},${size}`;
+    } else {
+      style.bottom = -size;
+      style.left = offset - size;
+      points = `0,0 ${size * 2},0 ${size},${size}`;
     }
-
-    const { top, left, width, height } = spotlight;
-    const r = 8;
 
     return (
       <svg
-        className="fixed inset-0 z-[9998]"
-        width={vw}
-        height={vh}
-        style={{ pointerEvents: 'auto' }}
-        onClick={handleClose}
+        style={{ ...style, pointerEvents: 'none' }}
+        width={side === 'left' || side === 'right' ? size : size * 2}
+        height={side === 'left' || side === 'right' ? size * 2 : size}
       >
-        <defs>
-          <mask id="spotlight-mask">
-            <rect x="0" y="0" width={vw} height={vh} fill="white" />
-            <rect
-              x={left}
-              y={top}
-              width={width}
-              height={height}
-              rx={r}
-              ry={r}
-              fill="black"
-            />
-          </mask>
-        </defs>
-        <rect
-          x="0"
-          y="0"
-          width={vw}
-          height={vh}
-          fill="hsl(var(--background) / 0.65)"
-          mask="url(#spotlight-mask)"
-        />
-        {/* Spotlight border glow */}
-        <rect
-          x={left}
-          y={top}
-          width={width}
-          height={height}
-          rx={r}
-          ry={r}
-          fill="none"
-          stroke="hsl(var(--primary) / 0.4)"
-          strokeWidth="2"
-          style={{ pointerEvents: 'none' }}
-        />
+        <polygon points={points} className="fill-popover" />
       </svg>
     );
   };
@@ -266,26 +302,24 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
   if (showEndScreen) {
     return (
       <>
-        {renderOverlay()}
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center" onClick={e => e.stopPropagation()}>
-          <Card className="w-full max-w-sm border-primary/20 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200">
-            <CardContent className="p-6 space-y-5">
-              <div className="text-center space-y-3">
-                <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Sparkles className="h-6 w-6 text-primary" />
-                </div>
-                <h2 className="text-lg font-semibold">Start small.</h2>
-                <div className="space-y-1.5 text-sm text-muted-foreground">
-                  <p>Capture one thing.</p>
-                  <p>Create one task.</p>
-                  <p>Schedule one focus block.</p>
-                </div>
+        <div className="fixed inset-0 z-[9998] bg-black/70" />
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div
+            className="w-full max-w-sm rounded-xl border border-border bg-popover p-6 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-center space-y-4">
+              <h2 className="text-lg font-semibold text-foreground">Start small.</h2>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>Capture one thing.</p>
+                <p>Create one task.</p>
+                <p>Schedule one focus block.</p>
               </div>
-              <Button className="w-full" onClick={handleFinish}>
+              <Button className="w-full mt-2" onClick={handleFinish}>
                 Go to Dashboard
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </>
     );
@@ -293,56 +327,128 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
 
   return (
     <>
-      {renderOverlay()}
-
-      {/* Tooltip card */}
-      <div
-        ref={tooltipRef}
-        className="fixed z-[9999] animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
-        style={{
-          top: tooltipPos.top,
-          left: tooltipPos.left,
-          width: TOOLTIP_W,
-        }}
-        onClick={e => e.stopPropagation()}
+      {/* Overlay with spotlight cutout */}
+      <svg
+        className="fixed inset-0 z-[9998]"
+        width={vw}
+        height={vh}
+        style={{ pointerEvents: 'none' }}
       >
-        <Card className="border-primary/20 shadow-2xl">
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="space-y-1.5 flex-1">
-                <p className="text-sm font-semibold leading-tight">{step.title}</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">{step.body}</p>
-              </div>
-              <button
-                onClick={handleClose}
-                className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+        <defs>
+          <mask id="tour-mask">
+            <rect x="0" y="0" width={vw} height={vh} fill="white" />
+            {spotlight && (
+              <rect
+                x={spotlight.left}
+                y={spotlight.top}
+                width={spotlight.width}
+                height={spotlight.height}
+                rx={8}
+                ry={8}
+                fill="black"
+              />
+            )}
+          </mask>
+        </defs>
+        <rect
+          x="0" y="0" width={vw} height={vh}
+          fill="rgba(0,0,0,0.7)"
+          mask="url(#tour-mask)"
+          style={{ pointerEvents: 'auto' }}
+        />
+        {/* Subtle pulse ring around spotlight */}
+        {spotlight && (
+          <rect
+            x={spotlight.left - 2}
+            y={spotlight.top - 2}
+            width={spotlight.width + 4}
+            height={spotlight.height + 4}
+            rx={10}
+            ry={10}
+            fill="none"
+            stroke="hsl(var(--primary) / 0.35)"
+            strokeWidth="1.5"
+            style={{ pointerEvents: 'none' }}
+          >
+            <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="2" />
+          </rect>
+        )}
+      </svg>
 
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-[10px] text-muted-foreground font-medium">
-                Step {currentStep + 1} of {steps.length}
+      {/* Tooltip */}
+      {tooltipStyle && (
+        <div
+          ref={tooltipRef}
+          className="fixed z-[9999] animate-in fade-in-0 duration-150"
+          style={{
+            top: tooltipStyle.top,
+            left: tooltipStyle.left,
+            width: Math.min(TOOLTIP_MAX_W, vw - 24),
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="relative rounded-lg border border-border bg-popover p-4 shadow-lg">
+            <Arrow side={tooltipStyle.arrowSide} offset={tooltipStyle.arrowOffset} />
+
+            <h3 className="text-[15px] font-semibold text-foreground leading-snug">
+              {step.title}
+            </h3>
+            <p className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">
+              {step.body}
+            </p>
+
+            <div className="flex items-center justify-between mt-4">
+              <span className="text-[11px] text-muted-foreground">
+                {currentStep + 1} of {steps.length}
               </span>
-              <div className="flex gap-1.5">
-                <Button size="sm" variant="ghost" onClick={handleClose} className="text-xs h-7 px-2">
-                  Skip tour
-                </Button>
+              <div className="flex items-center gap-2">
                 {currentStep > 0 && (
-                  <Button size="sm" variant="outline" onClick={handleBack} className="text-xs h-7 px-2">
-                    <ChevronLeft className="h-3 w-3" />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleBack}
+                    className="text-xs h-7 px-3"
+                  >
+                    Back
                   </Button>
                 )}
-                <Button size="sm" onClick={handleNext} className="text-xs h-7 px-3">
+                <Button
+                  size="sm"
+                  onClick={handleNext}
+                  className="text-xs h-7 px-4"
+                >
                   {isLast ? 'Finish' : 'Next'}
-                  {!isLast && <ChevronRight className="h-3 w-3 ml-0.5" />}
                 </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+
+            <div className="mt-2 text-right">
+              <button
+                onClick={() => setShowSkipConfirm(true)}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Skip tour
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Skip confirmation dialog */}
+      <AlertDialog open={showSkipConfirm} onOpenChange={setShowSkipConfirm}>
+        <AlertDialogContent className="z-[10000]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Skip the tour?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You can restart it anytime from Settings → Getting Started.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continue tour</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClose}>Skip</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
