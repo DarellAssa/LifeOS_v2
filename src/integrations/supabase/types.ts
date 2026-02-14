@@ -149,6 +149,118 @@ export type Database = {
         }
         Relationships: []
       }
+      copilot_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          role: string
+          thread_id: string
+          tool_args: Json | null
+          tool_name: string | null
+          tool_result: Json | null
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          id?: string
+          role: string
+          thread_id: string
+          tool_args?: Json | null
+          tool_name?: string | null
+          tool_result?: Json | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          thread_id?: string
+          tool_args?: Json | null
+          tool_name?: string | null
+          tool_result?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_threads: {
+        Row: {
+          created_at: string
+          id: string
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      copilot_tool_audit: {
+        Row: {
+          created_at: string
+          created_entities: Json | null
+          error: string | null
+          id: string
+          outcome: string
+          thread_id: string | null
+          tool_args: Json
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_entities?: Json | null
+          error?: string | null
+          id?: string
+          outcome: string
+          thread_id?: string | null
+          tool_args?: Json
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_entities?: Json | null
+          error?: string | null
+          id?: string
+          outcome?: string
+          thread_id?: string | null
+          tool_args?: Json
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_tool_audit_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_checkins: {
         Row: {
           blockers: string | null

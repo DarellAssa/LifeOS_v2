@@ -4,9 +4,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle, Sparkles, ShieldCheck, X } from 'lucide-react';
+import { Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle, Sparkles, ShieldCheck, X, Plus, MessageSquare, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/store/AppContext';
-import { buildMemoryPack, CopilotMessage, PendingConfirmation, sendCopilotMessage, confirmCopilotAction } from '@/lib/copilot';
+import {
+  CopilotMessage, CopilotThread, PendingConfirmation,
+  sendCopilotMessage, confirmCopilotAction,
+  loadThreads, loadThreadMessages, deleteThread,
+} from '@/lib/copilot';
 import ReactMarkdown from 'react-markdown';
 
 interface CopilotDrawerProps {
@@ -15,37 +19,34 @@ interface CopilotDrawerProps {
   initialMessage?: string;
 }
 
-const COPILOT_STORAGE_KEY = 'lifeos-copilot-history';
-const MAX_HISTORY = 30;
-
-function loadHistory(): CopilotMessage[] {
-  try {
-    const raw = localStorage.getItem(COPILOT_STORAGE_KEY);
-    if (raw) return JSON.parse(raw).slice(-MAX_HISTORY);
-  } catch { /* ignore */ }
-  return [];
-}
-
-function saveHistory(messages: CopilotMessage[]) {
-  localStorage.setItem(COPILOT_STORAGE_KEY, JSON.stringify(messages.slice(-MAX_HISTORY)));
-}
-
 export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDrawerProps) {
   const ctx = useAppContext();
-  const [messages, setMessages] = useState<CopilotMessage[]>(loadHistory);
+  const [threads, setThreads] = useState<CopilotThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showThreadList, setShowThreadList] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const processedInitialRef = useRef<string | null>(null);
+
+  // Load threads on open
+  useEffect(() => {
+    if (open) {
+      loadThreads().then(setThreads);
+    }
+  }, [open]);
 
   // Handle initial message
   useEffect(() => {
     if (open && initialMessage && initialMessage !== processedInitialRef.current && !isStreaming) {
       processedInitialRef.current = initialMessage;
       setInput('');
+      setActiveThreadId(null);
+      setMessages([]);
       setTimeout(() => sendMessage(initialMessage), 100);
     }
   }, [open, initialMessage]);
@@ -59,10 +60,33 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
 
   // Focus textarea
   useEffect(() => {
-    if (open && textareaRef.current) {
+    if (open && textareaRef.current && !showThreadList) {
       setTimeout(() => textareaRef.current?.focus(), 200);
     }
-  }, [open]);
+  }, [open, showThreadList]);
+
+  const openThread = useCallback(async (threadId: string) => {
+    const msgs = await loadThreadMessages(threadId);
+    setMessages(msgs);
+    setActiveThreadId(threadId);
+    setShowThreadList(false);
+  }, []);
+
+  const startNewChat = useCallback(() => {
+    setActiveThreadId(null);
+    setMessages([]);
+    setShowThreadList(false);
+  }, []);
+
+  const handleDeleteThread = useCallback(async (threadId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await deleteThread(threadId);
+    setThreads(prev => prev.filter(t => t.id !== threadId));
+    if (activeThreadId === threadId) {
+      setActiveThreadId(null);
+      setMessages([]);
+    }
+  }, [activeThreadId]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isStreaming) return;
@@ -77,15 +101,14 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    const memoryPack = buildMemoryPack(ctx.data);
-    const apiMessages = newMsgs.map(m => ({ role: m.role, content: m.content }));
-
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     let currentActionsTaken: string[] = [];
     let currentDataUsed: string[] = [];
 
     await sendCopilotMessage({
-      messages: apiMessages,
-      memoryPack,
+      message: text.trim(),
+      threadId: activeThreadId,
+      clientContext: { timezone: tz },
       onContent: (content) => {
         setMessages(prev => {
           const last = prev[prev.length - 1];
@@ -100,7 +123,8 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
           }];
         });
       },
-      onConfirmationRequired: (confirmation, partialContent) => {
+      onConfirmationRequired: (confirmation, partialContent, threadId) => {
+        setActiveThreadId(threadId);
         const confirmMsg: CopilotMessage = {
           role: 'assistant',
           content: partialContent || 'I need your approval before proceeding with the following actions:',
@@ -112,29 +136,30 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
         setMessages(prev => [...prev, confirmMsg]);
         setIsStreaming(false);
         abortRef.current = null;
-        setMessages(prev => { saveHistory(prev); return prev; });
       },
-      onMetadata: (actionsTaken, dataUsed) => {
+      onMetadata: (actionsTaken, dataUsed, threadId) => {
         currentActionsTaken = actionsTaken;
         currentDataUsed = dataUsed;
+        if (threadId) setActiveThreadId(threadId);
       },
-      onDone: () => {
+      onDone: (threadId) => {
         setIsStreaming(false);
         abortRef.current = null;
-        setMessages(prev => {
-          const updated = prev.map((m, i) => {
-            if (i === prev.length - 1 && m.role === 'assistant') {
-              return {
-                ...m,
-                actionsTaken: currentActionsTaken.length > 0 ? currentActionsTaken : undefined,
-                dataUsed: currentDataUsed.length > 0 ? currentDataUsed : undefined,
-              };
-            }
-            return m;
-          });
-          saveHistory(updated);
-          return updated;
-        });
+        if (threadId) setActiveThreadId(threadId);
+        setMessages(prev => prev.map((m, i) => {
+          if (i === prev.length - 1 && m.role === 'assistant') {
+            return {
+              ...m,
+              actionsTaken: currentActionsTaken.length > 0 ? currentActionsTaken : undefined,
+              dataUsed: currentDataUsed.length > 0 ? currentDataUsed : undefined,
+            };
+          }
+          return m;
+        }));
+        // Refresh thread list
+        loadThreads().then(setThreads);
+        // Refresh app data to reflect any server-side changes
+        ctx.refreshData?.();
       },
       onError: (err) => {
         setError(err);
@@ -142,11 +167,11 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
       },
       abortSignal: abortController.signal,
     });
-  }, [messages, isStreaming, ctx]);
+  }, [messages, isStreaming, activeThreadId, ctx]);
 
   const handleConfirm = useCallback(async (msgIndex: number) => {
     const msg = messages[msgIndex];
-    if (!msg.pendingConfirmation) return;
+    if (!msg.pendingConfirmation || !activeThreadId) return;
 
     setIsStreaming(true);
     setError(null);
@@ -154,26 +179,23 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
     await confirmCopilotAction({
       actionId: msg.pendingConfirmation.actionId,
       toolCalls: msg.pendingConfirmation.actions,
+      threadId: activeThreadId,
       onDone: (actionsTaken) => {
         setMessages(prev => {
           const updated = [...prev];
-          // Mark confirmation as done
           updated[msgIndex] = {
             ...updated[msgIndex],
             pendingConfirmation: { ...updated[msgIndex].pendingConfirmation!, confirmed: true },
           };
-          // Add confirmation result message
           updated.push({
             role: 'assistant',
             content: `✅ Done! ${actionsTaken.join('. ')}`,
             actionsTaken,
             timestamp: new Date().toISOString(),
           });
-          saveHistory(updated);
           return updated;
         });
         setIsStreaming(false);
-        // Refresh data to reflect server changes
         ctx.refreshData?.();
       },
       onError: (err) => {
@@ -181,7 +203,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
         setIsStreaming(false);
       },
     });
-  }, [messages, ctx]);
+  }, [messages, activeThreadId, ctx]);
 
   const handleReject = useCallback((msgIndex: number) => {
     setMessages(prev => {
@@ -192,10 +214,9 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
       };
       updated.push({
         role: 'assistant',
-        content: 'Understood — action cancelled. Let me know if you need anything else.',
+        content: 'Understood — action cancelled.',
         timestamp: new Date().toISOString(),
       });
-      saveHistory(updated);
       return updated;
     });
   }, []);
@@ -205,17 +226,59 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
     setIsStreaming(false);
   };
 
-  const clearHistory = () => {
-    setMessages([]);
-    localStorage.removeItem(COPILOT_STORAGE_KEY);
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage(input);
     }
   };
+
+  // Thread list view
+  if (showThreadList) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="w-full sm:max-w-lg flex flex-col p-0">
+          <SheetHeader className="p-4 pb-2 border-b border-border">
+            <div className="flex items-center justify-between">
+              <SheetTitle className="flex items-center gap-2 text-base">
+                <MessageSquare className="h-4 w-4 text-primary" />
+                Chat History
+              </SheetTitle>
+              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={startNewChat}>
+                <Plus className="h-3 w-3 mr-1" /> New Chat
+              </Button>
+            </div>
+          </SheetHeader>
+          <ScrollArea className="flex-1 px-4">
+            <div className="py-4 space-y-2">
+              {threads.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8">No chat history yet.</p>
+              )}
+              {threads.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => openThread(t.id)}
+                  className="w-full text-left rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors flex items-center justify-between group"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{t.title}</p>
+                    <p className="text-[10px] text-muted-foreground">{new Date(t.updatedAt).toLocaleDateString()}</p>
+                  </div>
+                  <Button
+                    variant="ghost" size="icon"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
+                    onClick={(e) => handleDeleteThread(t.id, e)}
+                  >
+                    <Trash2 className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
+    );
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -226,9 +289,14 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
               <Sparkles className="h-4 w-4 text-primary" />
               LifeOS Copilot
             </SheetTitle>
-            {messages.length > 0 && (
-              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={clearHistory}>Clear</Button>
-            )}
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => { loadThreads().then(setThreads); setShowThreadList(true); }}>
+                <MessageSquare className="h-3 w-3 mr-1" /> History
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={startNewChat}>
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
         </SheetHeader>
 
@@ -299,10 +367,9 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
                       <ShieldCheck className="h-3 w-3" /> Approved & executed
                     </div>
                   )}
-
                   {msg.pendingConfirmation?.confirmed === false && (
                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <X className="h-3 w-3" /> Cancelled by user
+                      <X className="h-3 w-3" /> Cancelled
                     </div>
                   )}
 
@@ -389,7 +456,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
             )}
           </div>
           <p className="text-[9px] text-muted-foreground mt-1.5 text-center">
-            Tools execute server-side with your session. Destructive actions require approval.
+            All tools execute server-side. Destructive actions require approval.
           </p>
         </div>
       </SheetContent>

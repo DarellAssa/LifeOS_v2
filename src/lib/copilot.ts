@@ -1,141 +1,16 @@
-import { AppData, Habit } from '@/types';
-import { format, isSameDay } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
-
-// ── Structured Memory Pack Builder ──
-export interface MemoryPackBlock {
-  section: string;
-  data: Record<string, unknown>;
-}
-
-export function buildMemoryPack(data: AppData): string {
-  const now = new Date();
-  const todayStr = format(now, 'yyyy-MM-dd');
-  const blocks: MemoryPackBlock[] = [];
-
-  // Today's agenda
-  const todayEvents = data.events.filter(e => isSameDay(new Date(e.startDateTime), now));
-  const todayBlocks = data.focusBlocks.filter(fb => isSameDay(new Date(fb.startDateTime), now));
-  blocks.push({
-    section: 'today',
-    data: {
-      date: todayStr,
-      events: todayEvents.slice(0, 10).map(e => ({ id: e.id, title: e.title, start: e.startDateTime, end: e.endDateTime, category: e.category })),
-      focusBlocks: todayBlocks.slice(0, 10).map(fb => ({ id: fb.id, title: fb.title, start: fb.startDateTime, end: fb.endDateTime, status: fb.status })),
-    },
-  });
-
-  // Overdue tasks
-  const overdue = data.tasks.filter(t => t.status !== 'done' && t.dueDate && t.dueDate < todayStr);
-  if (overdue.length > 0) {
-    blocks.push({
-      section: 'overdue_tasks',
-      data: {
-        count: overdue.length,
-        items: overdue.slice(0, 10).map(t => ({ id: t.id, title: t.title, dueDate: t.dueDate, priority: t.priority })),
-      },
-    });
-  }
-
-  // Due soon
-  const threeDaysLater = format(new Date(now.getTime() + 3 * 86400000), 'yyyy-MM-dd');
-  const dueSoon = data.tasks.filter(t => t.status !== 'done' && t.dueDate && t.dueDate >= todayStr && t.dueDate <= threeDaysLater);
-  if (dueSoon.length > 0) {
-    blocks.push({
-      section: 'due_soon',
-      data: {
-        count: dueSoon.length,
-        items: dueSoon.slice(0, 8).map(t => ({ id: t.id, title: t.title, dueDate: t.dueDate, priority: t.priority })),
-      },
-    });
-  }
-
-  // Active goals
-  const activeGoals = data.goals.filter(g => g.status === 'active');
-  if (activeGoals.length > 0) {
-    blocks.push({
-      section: 'active_goals',
-      data: {
-        count: activeGoals.length,
-        items: activeGoals.slice(0, 6).map(g => ({ id: g.id, title: g.title, category: g.category, progress: g.progressValue, targetDate: g.targetDate })),
-      },
-    });
-  }
-
-  // Unprocessed inbox
-  const unprocessed = data.inboxItems.filter(i => i.status === 'unprocessed');
-  if (unprocessed.length > 0) {
-    blocks.push({
-      section: 'inbox',
-      data: {
-        count: unprocessed.length,
-        items: unprocessed.slice(0, 5).map(i => ({ id: i.id, title: i.title || i.content.slice(0, 60), content: i.content.slice(0, 100) })),
-      },
-    });
-  }
-
-  // Habits
-  const activeHabits = data.habits.filter(h => h.status === 'active');
-  const dailyHabits = activeHabits.filter(h => h.frequency === 'daily');
-  const loggedToday = dailyHabits.filter(h => h.logs.includes(todayStr));
-  blocks.push({
-    section: 'habits',
-    data: {
-      dailyLoggedToday: loggedToday.length,
-      dailyTotal: dailyHabits.length,
-      items: activeHabits.slice(0, 5).map(h => ({ id: h.id, title: h.title, frequency: h.frequency, streak: getSimpleStreak(h, todayStr) })),
-    },
-  });
-
-  // Summary counts
-  blocks.push({
-    section: 'summary',
-    data: {
-      tasks: { total: data.tasks.length, done: data.tasks.filter(t => t.status === 'done').length },
-      goals: data.goals.length,
-      events: data.events.length,
-      habits: activeHabits.length,
-      notes: data.notes.length,
-      inbox: { total: data.inboxItems.length, unprocessed: unprocessed.length },
-      templates: data.templates.length,
-    },
-  });
-
-  // Templates
-  if (data.templates.length > 0) {
-    blocks.push({
-      section: 'templates',
-      data: {
-        items: data.templates.slice(0, 5).map(t => ({ id: t.id, name: t.name, category: t.category })),
-      },
-    });
-  }
-
-  // Convert to compact JSON string
-  const pack = JSON.stringify(blocks);
-  return pack.length > 10000 ? pack.slice(0, 10000) + '...(truncated)' : pack;
-}
-
-function getSimpleStreak(habit: Habit, todayStr: string): number {
-  let streak = 0;
-  const d = new Date(todayStr);
-  for (let i = 0; i < 60; i++) {
-    const ds = format(d, 'yyyy-MM-dd');
-    if (habit.logs.includes(ds)) {
-      streak++;
-      d.setDate(d.getDate() - 1);
-    } else break;
-  }
-  return streak;
-}
 
 // ── Types ──
 export interface CopilotMessage {
-  role: 'user' | 'assistant';
+  id?: string;
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   actionsTaken?: string[];
   dataUsed?: string[];
   pendingConfirmation?: PendingConfirmation;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
+  toolResult?: Record<string, unknown>;
   timestamp: string;
 }
 
@@ -152,6 +27,13 @@ export interface PendingConfirmation {
   confirmed?: boolean;
 }
 
+export interface CopilotThread {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── API Client ──
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/copilot`;
 
@@ -164,9 +46,54 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
+// ── Thread Management ──
+export async function loadThreads(): Promise<CopilotThread[]> {
+  const { data, error } = await supabase
+    .from('copilot_threads')
+    .select('id, title, created_at, updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(50);
+
+  if (error || !data) return [];
+  return data.map((t: any) => ({
+    id: t.id,
+    title: t.title || 'New chat',
+    createdAt: t.created_at,
+    updatedAt: t.updated_at,
+  }));
+}
+
+export async function loadThreadMessages(threadId: string): Promise<CopilotMessage[]> {
+  const { data, error } = await supabase
+    .from('copilot_messages')
+    .select('id, role, content, tool_name, tool_args, tool_result, created_at')
+    .eq('thread_id', threadId)
+    .order('created_at', { ascending: true })
+    .limit(100);
+
+  if (error || !data) return [];
+  return data
+    .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+    .map((m: any) => ({
+      id: m.id,
+      role: m.role as 'user' | 'assistant',
+      content: m.content || '',
+      toolName: m.tool_name,
+      toolArgs: m.tool_args,
+      toolResult: m.tool_result,
+      timestamp: m.created_at,
+    }));
+}
+
+export async function deleteThread(threadId: string): Promise<void> {
+  await supabase.from('copilot_threads').delete().eq('id', threadId);
+}
+
+// ── Send Message (server-side execution) ──
 export async function sendCopilotMessage({
-  messages,
-  memoryPack,
+  message,
+  threadId,
+  clientContext,
   onContent,
   onConfirmationRequired,
   onMetadata,
@@ -174,12 +101,13 @@ export async function sendCopilotMessage({
   onError,
   abortSignal,
 }: {
-  messages: { role: string; content: string }[];
-  memoryPack: string;
+  message: string;
+  threadId?: string | null;
+  clientContext?: { timezone?: string; weekStart?: string };
   onContent: (content: string) => void;
-  onConfirmationRequired: (confirmation: PendingConfirmation, partialContent: string) => void;
-  onMetadata: (actionsTaken: string[], dataUsed: string[]) => void;
-  onDone: () => void;
+  onConfirmationRequired: (confirmation: PendingConfirmation, partialContent: string, threadId: string) => void;
+  onMetadata: (actionsTaken: string[], dataUsed: string[], threadId: string) => void;
+  onDone: (threadId: string) => void;
   onError: (error: string) => void;
   abortSignal?: AbortSignal;
 }) {
@@ -188,7 +116,7 @@ export async function sendCopilotMessage({
     const resp = await fetch(CHAT_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ messages, memoryPack }),
+      body: JSON.stringify({ message, threadId, clientContext }),
       signal: abortSignal,
     });
 
@@ -200,30 +128,32 @@ export async function sendCopilotMessage({
 
     const contentType = resp.headers.get('Content-Type') || '';
 
-    // JSON response (confirmation required, or final non-streamed)
+    // JSON response (confirmation, final)
     if (contentType.includes('application/json')) {
       const data = await resp.json();
+      const rThreadId = data.threadId || threadId || '';
 
       if (data.type === 'confirmation_required') {
-        onMetadata(data.actionsTaken || [], data.dataUsed || []);
+        onMetadata(data.actionsTaken || [], data.dataUsed || [], rThreadId);
         onConfirmationRequired(
           { actionId: data.actionId, actions: data.pendingActions },
-          data.message || ''
+          data.message || '',
+          rThreadId,
         );
         return;
       }
 
       if (data.type === 'final') {
-        onMetadata(data.actionsTaken || [], data.dataUsed || []);
+        onMetadata(data.actionsTaken || [], data.dataUsed || [], rThreadId);
         onContent(data.content || '');
-        onDone();
+        onDone(rThreadId);
         return;
       }
 
       if (data.type === 'confirmation_executed') {
-        onMetadata(data.actionsTaken || [], []);
+        onMetadata(data.actionsTaken || [], [], rThreadId);
         onContent('✅ Actions executed successfully.');
-        onDone();
+        onDone(rThreadId);
         return;
       }
 
@@ -231,13 +161,14 @@ export async function sendCopilotMessage({
       return;
     }
 
-    // Streaming response (text/event-stream)
+    // Streaming response
     if (!resp.body) { onError('No response body'); return; }
 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let textBuffer = '';
     let fullContent = '';
+    let resolvedThreadId = threadId || '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -258,33 +189,30 @@ export async function sendCopilotMessage({
         try {
           const parsed = JSON.parse(jsonStr);
 
-          // Check for copilot metadata event
           if (parsed.copilot_metadata) {
-            onMetadata(parsed.copilot_metadata.actionsTaken || [], parsed.copilot_metadata.dataUsed || []);
+            resolvedThreadId = parsed.copilot_metadata.threadId || resolvedThreadId;
+            onMetadata(parsed.copilot_metadata.actionsTaken || [], parsed.copilot_metadata.dataUsed || [], resolvedThreadId);
             continue;
           }
 
           const choice = parsed.choices?.[0];
           if (!choice) continue;
-
           const delta = choice.delta;
           if (delta?.content) {
             fullContent += delta.content;
             onContent(fullContent);
           }
-
           if (choice.finish_reason === 'stop') break;
         } catch {
-          // Incomplete JSON, put back
           textBuffer = line + '\n' + textBuffer;
           break;
         }
       }
     }
 
-    onDone();
+    onDone(resolvedThreadId);
   } catch (err: any) {
-    if (err.name === 'AbortError') onDone();
+    if (err.name === 'AbortError') onDone(threadId || '');
     else onError(err.message || 'Network error');
   }
 }
@@ -292,11 +220,13 @@ export async function sendCopilotMessage({
 export async function confirmCopilotAction({
   actionId,
   toolCalls,
+  threadId,
   onDone,
   onError,
 }: {
   actionId: string;
   toolCalls: PendingAction[];
+  threadId: string;
   onDone: (actionsTaken: string[]) => void;
   onError: (error: string) => void;
 }) {
@@ -306,12 +236,12 @@ export async function confirmCopilotAction({
       method: 'POST',
       headers,
       body: JSON.stringify({
+        threadId,
         confirmedActionId: actionId,
         confirmedToolCalls: toolCalls.map(tc => ({
           name: tc.name,
           arguments: tc.arguments,
         })),
-        messages: [],
       }),
     });
 
