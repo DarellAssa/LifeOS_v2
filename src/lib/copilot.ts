@@ -65,6 +65,32 @@ export interface ScheduleConflict {
   route: string;
 }
 
+// ── Triage types ──
+export interface TriageItem {
+  item_id: string;
+  original_title: string | null;
+  original_content: string;
+  suggested_action: 'convert_task' | 'convert_note' | 'convert_event' | 'convert_goal' | 'archive' | 'leave';
+  confidence: 'low' | 'med' | 'high';
+  suggested: {
+    title: string;
+    notes?: string | null;
+    due_date?: string | null;
+    start_at?: string | null;
+    end_at?: string | null;
+    priority?: 'low' | 'med' | 'high' | null;
+    tags?: string[];
+    category?: string | null;
+  };
+  reason: string;
+}
+
+export interface TriageDecision {
+  item_id: string;
+  action: string;
+  fields: Record<string, unknown>;
+}
+
 export interface CopilotPlan {
   title: string;
   goal: string;
@@ -75,6 +101,7 @@ export interface CopilotPlan {
   schedule_operations?: ScheduleOperation[] | null;
   schedule_conflicts?: ScheduleConflict[] | null;
   schedule_alternatives?: { start_at: string; end_at: string; reason: string }[] | null;
+  triage_items?: TriageItem[] | null;
   approved?: boolean; // undefined = pending, true = approved, false = cancelled
 }
 

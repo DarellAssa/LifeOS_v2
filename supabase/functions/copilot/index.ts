@@ -286,13 +286,20 @@ OUTPUT FORMAT: You MUST output ONLY a JSON object matching this exact schema:
   "overall_impact": { "creates": 0, "updates": 0, "deletes": 0 },
   "assumptions": ["assumption 1"],
   "questions": [],
-  "schedule_operations": null
+  "schedule_operations": null,
+  "triage_items": null
 }
 
 SCHEDULING:
 - For scheduling requests, use tools: parse_time_request, check_schedule_conflicts, schedule_preview, commit_schedule.
 - When using schedule tools, include a "schedule_operations" key in your plan with the schedule_preview output.
 - For non-scheduling requests, set schedule_operations to null.
+
+TRIAGE:
+- For inbox triage requests ("clean my inbox", "triage inbox", "process inbox"), use tools: propose_inbox_triage, triage_preview, triage_commit.
+- Include a single step: triage_commit with requires_confirmation=true.
+- Set "triage_items" in the plan to the output of propose_inbox_triage (will be injected automatically).
+- For non-triage requests, set triage_items to null.
 
 RULES:
 1. Output ONLY the JSON plan. No markdown, no explanation, no wrapping.
@@ -303,8 +310,9 @@ RULES:
 6. No deletes unless user explicitly asked for deletion.
 7. If updates > 3, set requires_confirmation=true on those steps.
 8. Max 6 steps per plan.
-9. Available tools: search_lifeos, create_task, update_task, schedule_task_focus_block, create_event, create_goal, triage_inbox, apply_template, parse_time_request, check_schedule_conflicts, schedule_preview, commit_schedule.
-10. For scheduling requests: always use parse_time_request first, then schedule_preview, then commit_schedule.`;
+9. Available tools: search_lifeos, create_task, update_task, schedule_task_focus_block, create_event, create_goal, triage_inbox, apply_template, parse_time_request, check_schedule_conflicts, schedule_preview, commit_schedule, propose_inbox_triage, triage_preview, triage_commit.
+10. For scheduling requests: always use parse_time_request first, then schedule_preview, then commit_schedule.
+11. For triage requests: always use propose_inbox_triage first, then triage_preview, then triage_commit.`;
 
 // ── Time parser system prompt ──
 const TIME_PARSER_SYSTEM_PROMPT = `You convert natural language scheduling instructions into structured JSON.
@@ -591,9 +599,74 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "propose_inbox_triage",
+      description: "Generate AI-powered triage suggestions for unprocessed inbox items. NO WRITES.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Max items to triage (default 20)" },
+          scope: { type: "string", enum: ["unprocessed", "all"], description: "Which items to triage" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "triage_preview",
+      description: "Preview triage operations without writing. Shows what will be created/archived.",
+      parameters: {
+        type: "object",
+        properties: {
+          decisions: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                item_id: { type: "string" },
+                action: { type: "string", enum: ["convert_task", "convert_note", "convert_event", "convert_goal", "archive", "leave"] },
+                fields: { type: "object", description: "Override fields like title, due_date, priority, tags" },
+              },
+              required: ["item_id", "action"],
+            },
+          },
+        },
+        required: ["decisions"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "triage_commit",
+      description: "Execute triage decisions: create entities + archive inbox items. REQUIRES approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          decisions: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                item_id: { type: "string" },
+                action: { type: "string", enum: ["convert_task", "convert_note", "convert_event", "convert_goal", "archive", "leave"] },
+                fields: { type: "object" },
+              },
+              required: ["item_id", "action"],
+            },
+          },
+          confirm: { type: "boolean" },
+        },
+        required: ["decisions", "confirm"],
+      },
+    },
+  },
 ];
 
-const RISKY_TOOLS = new Set(["triage_inbox", "apply_template", "commit_schedule"]);
+const RISKY_TOOLS = new Set(["triage_inbox", "apply_template", "commit_schedule", "triage_commit"]);
 
 // ── Tool Execution Functions ──
 
@@ -1164,6 +1237,296 @@ async function executeCommitSchedule(
   };
 }
 
+// ── Inbox Triage Tool Implementations ──
+
+const TRIAGE_SYSTEM_PROMPT = `You classify inbox items for a personal productivity app.
+Given a list of inbox items, output STRICT JSON matching this schema for each item:
+{
+  "items": [
+    {
+      "item_id": "uuid",
+      "suggested_action": "convert_task|convert_note|convert_event|convert_goal|archive|leave",
+      "confidence": "low|med|high",
+      "suggested": {
+        "title": "string",
+        "notes": "string or null",
+        "due_date": "YYYY-MM-DD or null",
+        "start_at": "ISO datetime or null",
+        "end_at": "ISO datetime or null",
+        "priority": "low|med|high or null",
+        "tags": ["string"],
+        "category": "string or null"
+      },
+      "reason": "string <= 120 chars, factual"
+    }
+  ]
+}
+
+RULES:
+1. Classify based on content: actionable items → task, reference info → note, time-specific → event, long-term ambition → goal, spam/noise → archive, unclear → leave.
+2. If confidence is low, set suggested_action to "leave" unless content is clearly classifiable.
+3. NEVER invent dates. Only extract dates if explicitly stated in content (e.g. "due Friday", "meeting at 3pm").
+4. Keep reasons factual and under 120 characters.
+5. Title should be clean and concise (max 80 chars).
+6. Output ONLY the JSON object.`;
+
+async function executeProposInboxTriage(
+  supabase: ReturnType<typeof createClient>, userId: string, apiKey: string,
+  args: { limit?: number; scope?: string; preferences?: { timezone?: string } }
+): Promise<ToolExecResult> {
+  const limit = Math.min(args.limit || 20, 50);
+  const scope = args.scope || "unprocessed";
+
+  let query = supabase.from("inbox_items")
+    .select("id, title, content, tags, source, created_at")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (scope === "unprocessed") {
+    query = query.eq("status", "unprocessed");
+  }
+
+  const { data: items, error } = await query;
+  if (error) return { output: { error: error.message }, actionsTaken: [], dataUsed: [] };
+  if (!items || items.length === 0) {
+    return { output: { items: [], summary: { convert_task: 0, convert_note: 0, convert_event: 0, convert_goal: 0, archive: 0, leave: 0 } }, actionsTaken: [], dataUsed: ["inbox_items"] };
+  }
+
+  // Build prompt with items
+  const itemsText = items.map(it => `- ID: ${it.id}\n  Title: ${it.title || "(none)"}\n  Content: ${(it.content || "").slice(0, 200)}\n  Source: ${it.source}\n  Created: ${it.created_at}`).join("\n\n");
+
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: TRIAGE_SYSTEM_PROMPT },
+          { role: "user", content: `Timezone: ${args.preferences?.timezone || "UTC"}\n\nInbox items to classify:\n\n${itemsText}` },
+        ],
+        max_tokens: 4000, temperature: 0.2,
+      }),
+    });
+
+    if (!resp.ok) {
+      // Fallback: return items with "leave" suggestion
+      const fallbackItems = items.map(it => ({
+        item_id: it.id, original_title: it.title, original_content: (it.content || "").slice(0, 200),
+        suggested_action: "leave" as const, confidence: "low" as const,
+        suggested: { title: it.title || (it.content || "").slice(0, 80) },
+        reason: "AI unavailable, manual review needed",
+      }));
+      return { output: { items: fallbackItems, summary: { convert_task: 0, convert_note: 0, convert_event: 0, convert_goal: 0, archive: 0, leave: fallbackItems.length } }, actionsTaken: [], dataUsed: ["inbox_items"] };
+    }
+
+    const data = await resp.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const match = content.match(/\{[\s\S]*\}/);
+
+    if (!match) {
+      const fallbackItems = items.map(it => ({
+        item_id: it.id, original_title: it.title, original_content: (it.content || "").slice(0, 200),
+        suggested_action: "leave" as const, confidence: "low" as const,
+        suggested: { title: it.title || (it.content || "").slice(0, 80) },
+        reason: "Classification failed, manual review needed",
+      }));
+      return { output: { items: fallbackItems, summary: { convert_task: 0, convert_note: 0, convert_event: 0, convert_goal: 0, archive: 0, leave: fallbackItems.length } }, actionsTaken: [], dataUsed: ["inbox_items"] };
+    }
+
+    const parsed = JSON.parse(match[0]);
+    const classifiedItems = (parsed.items || []).map((ci: any) => {
+      const original = items.find(it => it.id === ci.item_id);
+      return {
+        item_id: ci.item_id,
+        original_title: original?.title || null,
+        original_content: (original?.content || "").slice(0, 200),
+        suggested_action: ["convert_task", "convert_note", "convert_event", "convert_goal", "archive", "leave"].includes(ci.suggested_action) ? ci.suggested_action : "leave",
+        confidence: ["low", "med", "high"].includes(ci.confidence) ? ci.confidence : "low",
+        suggested: {
+          title: ci.suggested?.title || original?.title || (original?.content || "").slice(0, 80),
+          notes: ci.suggested?.notes || null,
+          due_date: ci.suggested?.due_date || null,
+          start_at: ci.suggested?.start_at || null,
+          end_at: ci.suggested?.end_at || null,
+          priority: ci.suggested?.priority || null,
+          tags: ci.suggested?.tags || [],
+          category: ci.suggested?.category || null,
+        },
+        reason: (ci.reason || "").slice(0, 120),
+      };
+    });
+
+    // Build summary
+    const summary = { convert_task: 0, convert_note: 0, convert_event: 0, convert_goal: 0, archive: 0, leave: 0 };
+    for (const ci of classifiedItems) {
+      if (ci.suggested_action in summary) (summary as any)[ci.suggested_action]++;
+    }
+
+    return {
+      output: { items: classifiedItems, summary },
+      actionsTaken: [],
+      dataUsed: [`Classified ${classifiedItems.length} inbox items`],
+    };
+  } catch (err: any) {
+    return { output: { error: err.message }, actionsTaken: [], dataUsed: [] };
+  }
+}
+
+function executeTriagePreview(
+  args: { decisions: Array<{ item_id: string; action: string; fields?: Record<string, unknown> }> }
+): ToolExecResult {
+  const decisions = args.decisions || [];
+  const operations: any[] = [];
+  const warnings: string[] = [];
+  let creates = 0, updates = 0;
+
+  for (const d of decisions) {
+    if (d.action === "leave") continue;
+    if (d.action === "archive") {
+      operations.push({ op: "archive", kind: "inbox", source_item_id: d.item_id, title: (d.fields?.title as string) || "Inbox item", route: "/inbox", risk: "low" });
+      updates++;
+    } else {
+      const kind = d.action.replace("convert_", "");
+      operations.push({ op: "create", kind, source_item_id: d.item_id, title: (d.fields?.title as string) || "Untitled", route: `/${kind === "task" ? "tasks" : kind === "note" ? "notes" : kind === "event" ? "calendar" : "goals"}`, risk: "low" });
+      creates++;
+      // Also archive the source
+      operations.push({ op: "update", kind: "inbox", source_item_id: d.item_id, title: "Mark as converted", route: "/inbox", risk: "low" });
+      updates++;
+    }
+  }
+
+  if (decisions.some(d => d.action !== "leave" && !d.fields?.title)) {
+    warnings.push("Some items have no title set — defaults will be used.");
+  }
+
+  return {
+    output: { operations, impact: { creates, updates, deletes: 0 }, warnings },
+    actionsTaken: [],
+    dataUsed: ["triage_preview"],
+  };
+}
+
+async function executeTriageCommit(
+  supabase: ReturnType<typeof createClient>, userId: string,
+  args: { decisions: Array<{ item_id: string; action: string; fields?: Record<string, unknown> }>; confirm: boolean }
+): Promise<ToolExecResult> {
+  if (!args.confirm) return { output: { error: "Must confirm before committing" }, actionsTaken: [], dataUsed: [] };
+
+  const created: any[] = [];
+  const updated: any[] = [];
+  const archived: any[] = [];
+  const errors: any[] = [];
+  const createdEntities: { type: string; id: string }[] = [];
+  const now = new Date().toISOString();
+
+  for (const d of (args.decisions || [])) {
+    if (d.action === "leave") continue;
+
+    // Verify item exists and belongs to user
+    const { data: item } = await supabase.from("inbox_items").select("id, title, content").eq("id", d.item_id).eq("user_id", userId).single();
+    if (!item) { errors.push({ item_id: d.item_id, message: "Item not found" }); continue; }
+
+    const fields = d.fields || {};
+    const title = (fields.title as string) || item.title || (item.content || "").slice(0, 80);
+
+    if (d.action === "archive") {
+      const { error } = await supabase.from("inbox_items").update({ status: "archived", updated_at: now }).eq("id", d.item_id).eq("user_id", userId);
+      if (error) { errors.push({ item_id: d.item_id, message: error.message }); continue; }
+      archived.push({ kind: "inbox", id: d.item_id, title, route: "/inbox" });
+      continue;
+    }
+
+    let entityId = "";
+    let entityKind = "";
+
+    switch (d.action) {
+      case "convert_task": {
+        entityKind = "task";
+        const { data, error } = await supabase.from("tasks").insert({
+          user_id: userId, title,
+          description: (fields.notes as string) || null,
+          priority: (fields.priority as string) || "med",
+          due_date: (fields.due_date as string) || null,
+          tags: (fields.tags as string[]) || [],
+          subtasks: [], source: "inbox_triage", status: "todo",
+          created_at: now, updated_at: now,
+        }).select("id").single();
+        if (error) { errors.push({ item_id: d.item_id, message: error.message }); continue; }
+        entityId = data.id;
+        break;
+      }
+      case "convert_note": {
+        entityKind = "note";
+        const { data, error } = await supabase.from("notes").insert({
+          user_id: userId, title,
+          content: (fields.notes as string) || item.content || "",
+          tags: (fields.tags as string[]) || [], pinned: false,
+          created_at: now, updated_at: now,
+        }).select("id").single();
+        if (error) { errors.push({ item_id: d.item_id, message: error.message }); continue; }
+        entityId = data.id;
+        break;
+      }
+      case "convert_event": {
+        entityKind = "event";
+        const { data, error } = await supabase.from("calendar_events").insert({
+          user_id: userId, title,
+          start_date_time: (fields.start_at as string) || now,
+          end_date_time: (fields.end_at as string) || new Date(Date.now() + 3600000).toISOString(),
+          category: (fields.category as string) || "personal",
+          notes: (fields.notes as string) || null,
+          created_at: now, updated_at: now,
+        }).select("id").single();
+        if (error) { errors.push({ item_id: d.item_id, message: error.message }); continue; }
+        entityId = data.id;
+        break;
+      }
+      case "convert_goal": {
+        entityKind = "goal";
+        const today = now.slice(0, 10);
+        const { data, error } = await supabase.from("goals").insert({
+          user_id: userId, title,
+          description: (fields.notes as string) || null,
+          category: (fields.category as string) || "custom",
+          status: "active", start_date: today,
+          target_date: (fields.due_date as string) || today,
+          progress_type: "manual", progress_value: 0,
+          linked_task_ids: [], milestones: [],
+          created_at: now, updated_at: now,
+        }).select("id").single();
+        if (error) { errors.push({ item_id: d.item_id, message: error.message }); continue; }
+        entityId = data.id;
+        break;
+      }
+      default:
+        errors.push({ item_id: d.item_id, message: `Unknown action: ${d.action}` });
+        continue;
+    }
+
+    if (entityId) {
+      createdEntities.push({ type: entityKind, id: entityId });
+      created.push({ kind: entityKind, id: entityId, title, route: `/${entityKind === "task" ? "tasks" : entityKind === "note" ? "notes" : entityKind === "event" ? "calendar" : "goals"}` });
+
+      // Mark inbox item as converted
+      await supabase.from("inbox_items").update({
+        status: "converted",
+        conversion: { kind: entityKind, entityId, convertedAt: now },
+        updated_at: now,
+      }).eq("id", d.item_id).eq("user_id", userId);
+      updated.push({ kind: "inbox", id: d.item_id, title: `Converted to ${entityKind}`, route: "/inbox" });
+    }
+  }
+
+  const actionsTaken: string[] = [];
+  if (created.length > 0) actionsTaken.push(`Created ${created.length} entities from inbox`);
+  if (archived.length > 0) actionsTaken.push(`Archived ${archived.length} inbox items`);
+
+  return { output: { created, updated, archived, errors }, actionsTaken, dataUsed: [], createdEntities };
+}
+
 // Tool dispatcher
 async function executeTool(
   supabase: ReturnType<typeof createClient>, userId: string, apiKey: string,
@@ -1183,6 +1546,9 @@ async function executeTool(
     case "propose_time_alternatives": return await executeProposTimeAlternatives(supabase, userId, args as any);
     case "schedule_preview": return executeSchedulePreview(args as any);
     case "commit_schedule": return await executeCommitSchedule(supabase, userId, args as any);
+    case "propose_inbox_triage": return await executeProposInboxTriage(supabase, userId, apiKey, args as any);
+    case "triage_preview": return executeTriagePreview(args as any);
+    case "triage_commit": return await executeTriageCommit(supabase, userId, args as any);
     default: return { output: { error: `Unknown tool: ${toolName}` }, actionsTaken: [], dataUsed: [] };
   }
 }
@@ -1239,6 +1605,9 @@ function describeAction(name: string, args: Record<string, unknown>): string {
     case "propose_time_alternatives": return `Find alternative time slots`;
     case "schedule_preview": return `Preview schedule changes`;
     case "commit_schedule": return `Commit ${((args.operations as any[]) || []).length} schedule operation(s)`;
+    case "propose_inbox_triage": return `Classify ${args.limit || 20} inbox items for triage`;
+    case "triage_preview": return `Preview triage: ${((args.decisions as any[]) || []).length} decisions`;
+    case "triage_commit": return `Apply triage: ${((args.decisions as any[]) || []).length} decisions`;
     default: return `${name}(${JSON.stringify(args).slice(0, 80)})`;
   }
 }
@@ -1276,6 +1645,7 @@ const VALID_TOOLS = new Set([
   "create_event", "create_goal", "triage_inbox", "apply_template",
   "parse_time_request", "check_schedule_conflicts", "propose_time_alternatives",
   "schedule_preview", "commit_schedule",
+  "propose_inbox_triage", "triage_preview", "triage_commit",
 ]);
 
 function validatePlan(raw: any): { valid: boolean; plan?: Plan; error?: string } {
@@ -1629,9 +1999,34 @@ serve(async (req) => {
         }
       }
 
+      // For triage intents, run propose_inbox_triage inline first
+      let triageContext = "";
+      let triageItems: any[] | null = null;
+      if (intent.goal === "triage") {
+        const tz = clientContext?.timezone || "UTC";
+        const triageResult = await executeProposInboxTriage(supabase, userId, LOVABLE_API_KEY, {
+          limit: 20, scope: "unprocessed",
+          preferences: { timezone: tz },
+        });
+
+        if (triageResult.output && !triageResult.output.error && (triageResult.output as any).items?.length > 0) {
+          triageItems = (triageResult.output as any).items;
+          const summary = (triageResult.output as any).summary;
+          triageContext = `\n\n## Inbox Triage Results\n${JSON.stringify({ items: triageItems, summary })}`;
+        } else if ((triageResult.output as any)?.items?.length === 0) {
+          await persistMessage(supabase, currentThreadId!, userId, "assistant", "Your inbox is empty — nothing to triage.");
+          return new Response(JSON.stringify({
+            type: "final",
+            content: "Your inbox is empty — nothing to triage.",
+            threadId: currentThreadId,
+            actionsTaken: [], dataUsed: ["inbox_items"],
+          }), { headers: jsonHeaders });
+        }
+      }
+
       // Build planning messages
       const planMessages: any[] = [
-        { role: "system", content: `${PLANNING_SYSTEM_PROMPT}\n\n## Retrieved Context\n${contextJson}${scheduleContext}` },
+        { role: "system", content: `${PLANNING_SYSTEM_PROMPT}\n\n## Retrieved Context\n${contextJson}${scheduleContext}${triageContext}` },
       ];
       for (const m of (dbMessages || [])) {
         if (m.role === "tool") continue;
@@ -1678,6 +2073,11 @@ serve(async (req) => {
           threadId: currentThreadId,
           actionsTaken: [], dataUsed: [],
         }), { headers: jsonHeaders });
+      }
+
+      // Inject triage items into plan if available
+      if (triageItems && plan) {
+        (plan as any).triage_items = triageItems;
       }
 
       // Persist the plan as a message for history
