@@ -4,11 +4,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle, Sparkles, ShieldCheck, X, Plus, MessageSquare, Trash2, Copy, Bug } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import {
+  Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle,
+  Sparkles, ShieldCheck, X, Plus, MessageSquare, Trash2, Bug,
+  ListChecks, Play, CheckCircle2, XCircle, Edit3,
+} from 'lucide-react';
 import { useAppContext } from '@/store/AppContext';
 import {
-  CopilotMessage, CopilotThread, PendingConfirmation,
-  sendCopilotMessage, confirmCopilotAction,
+  CopilotMessage, CopilotThread, CopilotPlan, PendingConfirmation, ToolRun,
+  CopilotMode, sendCopilotMessage, confirmCopilotAction, approvePlan, cancelPlan,
   loadThreads, loadThreadMessages, deleteThread,
 } from '@/lib/copilot';
 import ReactMarkdown from 'react-markdown';
@@ -17,6 +22,140 @@ interface CopilotDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialMessage?: string;
+}
+
+// ── Plan Preview Card ──
+function PlanPreviewCard({
+  plan,
+  onApprove,
+  onCancel,
+  onEdit,
+  isExecuting,
+  executionResult,
+}: {
+  plan: CopilotPlan;
+  onApprove: () => void;
+  onCancel: () => void;
+  onEdit: () => void;
+  isExecuting: boolean;
+  executionResult?: { summary: string; toolRuns: ToolRun[] } | null;
+}) {
+  const [showTools, setShowTools] = useState(false);
+  const isApproved = plan.approved === true;
+  const isCancelled = plan.approved === false;
+  const isPending = plan.approved === undefined;
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2.5">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <ListChecks className="h-4 w-4 text-primary" />
+        <span className="text-sm font-medium">{plan.title}</span>
+        <Badge variant="outline" className="text-[10px] h-5">
+          {plan.steps.length} step{plan.steps.length > 1 ? 's' : ''}
+        </Badge>
+      </div>
+
+      {/* Steps */}
+      <div className="space-y-1.5">
+        {plan.steps.map((step, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <span className="text-[10px] font-mono text-muted-foreground mt-0.5 w-4 shrink-0">{i + 1}.</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs">{step.label}</p>
+              {step.requires_confirmation && (
+                <span className="text-[9px] text-amber-600 dark:text-amber-400">⚠️ Requires confirmation</span>
+              )}
+            </div>
+            {executionResult?.toolRuns?.[i] && (
+              executionResult.toolRuns[i].ok
+                ? <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                : <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Impact summary */}
+      <div className="flex gap-3 text-[10px] text-muted-foreground">
+        {plan.overall_impact.creates > 0 && (
+          <span className="text-primary">+{plan.overall_impact.creates} create{plan.overall_impact.creates > 1 ? 's' : ''}</span>
+        )}
+        {plan.overall_impact.updates > 0 && (
+          <span className="text-amber-600 dark:text-amber-400">~{plan.overall_impact.updates} update{plan.overall_impact.updates > 1 ? 's' : ''}</span>
+        )}
+        {plan.overall_impact.deletes > 0 && (
+          <span className="text-destructive">-{plan.overall_impact.deletes} delete{plan.overall_impact.deletes > 1 ? 's' : ''}</span>
+        )}
+      </div>
+
+      {/* Assumptions */}
+      {plan.assumptions.length > 0 && (
+        <div className="text-[10px] text-muted-foreground">
+          <span className="font-medium">Assumptions: </span>
+          {plan.assumptions.join('; ')}
+        </div>
+      )}
+
+      {/* Tools (collapsed) */}
+      <Collapsible open={showTools} onOpenChange={setShowTools}>
+        <CollapsibleTrigger className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+          <Wrench className="h-3 w-3" />
+          Tools to be called
+          <ChevronDown className={`h-3 w-3 transition-transform ${showTools ? 'rotate-180' : ''}`} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-1">
+          <div className="space-y-0.5 pl-4">
+            {plan.steps.map((step, i) => (
+              <p key={i} className="text-[10px] text-muted-foreground font-mono">
+                {step.tool}({Object.keys(step.args).join(', ')})
+              </p>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Execution result */}
+      {executionResult && (
+        <div className="rounded border border-primary/20 bg-primary/5 p-2 text-xs">
+          <ReactMarkdown>{executionResult.summary}</ReactMarkdown>
+        </div>
+      )}
+
+      {/* Buttons */}
+      {isPending && !executionResult && (
+        <div className="space-y-2">
+          <p className="text-[10px] text-muted-foreground italic">
+            Copilot will not change anything until you approve.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" className="h-7 text-xs gap-1" onClick={onApprove} disabled={isExecuting}>
+              <Play className="h-3 w-3" /> Approve
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onEdit} disabled={isExecuting}>
+              <Edit3 className="h-3 w-3" /> Edit
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onCancel} disabled={isExecuting}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {isApproved && !executionResult && isExecuting && (
+        <div className="flex items-center gap-2 text-xs text-primary">
+          <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          Executing plan…
+        </div>
+      )}
+
+      {isCancelled && (
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <X className="h-3 w-3" /> Plan cancelled
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDrawerProps) {
@@ -29,6 +168,8 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
   const [error, setError] = useState<string | null>(null);
   const [errorDebug, setErrorDebug] = useState<{ requestId?: string; status?: number; response?: string; route?: string } | null>(null);
   const [showThreadList, setShowThreadList] = useState(false);
+  const [mode, setMode] = useState<CopilotMode>('chat');
+  const [executionResults, setExecutionResults] = useState<Map<number, { summary: string; toolRuns: ToolRun[] }>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -71,12 +212,14 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
     setMessages(msgs);
     setActiveThreadId(threadId);
     setShowThreadList(false);
+    setExecutionResults(new Map());
   }, []);
 
   const startNewChat = useCallback(() => {
     setActiveThreadId(null);
     setMessages([]);
     setShowThreadList(false);
+    setExecutionResults(new Map());
   }, []);
 
   const handleDeleteThread = useCallback(async (threadId: string, e: React.MouseEvent) => {
@@ -110,10 +253,11 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
       message: text.trim(),
       threadId: activeThreadId,
       clientContext: { timezone: tz },
+      mode,
       onContent: (content) => {
         setMessages(prev => {
           const last = prev[prev.length - 1];
-          if (last?.role === 'assistant') {
+          if (last?.role === 'assistant' && !last.pendingPlan) {
             return prev.map((m, i) => i === prev.length - 1 ? { ...m, content } : m);
           }
           return [...prev, {
@@ -138,6 +282,18 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
         setIsStreaming(false);
         abortRef.current = null;
       },
+      onPlanGenerated: (plan, threadId) => {
+        setActiveThreadId(threadId);
+        const planMsg: CopilotMessage = {
+          role: 'assistant',
+          content: `📋 Here's my plan:`,
+          pendingPlan: plan,
+          timestamp: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, planMsg]);
+        setIsStreaming(false);
+        abortRef.current = null;
+      },
       onMetadata: (actionsTaken, dataUsed, threadId) => {
         currentActionsTaken = actionsTaken;
         currentDataUsed = dataUsed;
@@ -148,7 +304,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
         abortRef.current = null;
         if (threadId) setActiveThreadId(threadId);
         setMessages(prev => prev.map((m, i) => {
-          if (i === prev.length - 1 && m.role === 'assistant') {
+          if (i === prev.length - 1 && m.role === 'assistant' && !m.pendingPlan) {
             return {
               ...m,
               actionsTaken: currentActionsTaken.length > 0 ? currentActionsTaken : undefined,
@@ -157,14 +313,11 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
           }
           return m;
         }));
-        // Refresh thread list
         loadThreads().then(setThreads);
-        // Refresh app data to reflect any server-side changes
         ctx.refreshData?.();
       },
       onError: (err) => {
         setError(err);
-        // Try to parse requestId from error JSON
         try {
           const parsed = JSON.parse(err);
           setErrorDebug({ requestId: parsed.requestId, stage: parsed.stage, status: parsed.status, response: err, route: window.location.pathname } as any);
@@ -175,7 +328,66 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
       },
       abortSignal: abortController.signal,
     });
-  }, [messages, isStreaming, activeThreadId, ctx]);
+  }, [messages, isStreaming, activeThreadId, ctx, mode]);
+
+  const handleApprovePlan = useCallback(async (msgIndex: number) => {
+    const msg = messages[msgIndex];
+    if (!msg.pendingPlan || !activeThreadId) return;
+
+    // Mark plan as approved
+    setMessages(prev => prev.map((m, i) =>
+      i === msgIndex ? { ...m, pendingPlan: { ...m.pendingPlan!, approved: true } } : m
+    ));
+    setIsStreaming(true);
+    setError(null);
+
+    await approvePlan({
+      plan: msg.pendingPlan,
+      threadId: activeThreadId,
+      onDone: (summary, toolRuns, actionsTaken) => {
+        setExecutionResults(prev => new Map(prev).set(msgIndex, { summary, toolRuns }));
+        setMessages(prev => {
+          const updated = [...prev];
+          updated.push({
+            role: 'assistant',
+            content: summary,
+            actionsTaken,
+            timestamp: new Date().toISOString(),
+          });
+          return updated;
+        });
+        setIsStreaming(false);
+        ctx.refreshData?.();
+      },
+      onError: (err) => {
+        setError(err);
+        setIsStreaming(false);
+      },
+    });
+  }, [messages, activeThreadId, ctx]);
+
+  const handleCancelPlan = useCallback(async (msgIndex: number) => {
+    setMessages(prev => prev.map((m, i) =>
+      i === msgIndex ? { ...m, pendingPlan: { ...m.pendingPlan!, approved: false } } : m
+    ));
+    if (activeThreadId) {
+      await cancelPlan({ threadId: activeThreadId });
+    }
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: 'Plan cancelled.',
+      timestamp: new Date().toISOString(),
+    }]);
+  }, [activeThreadId]);
+
+  const handleEditPlan = useCallback((msgIndex: number) => {
+    // Focus input for refinement, mark plan as cancelled
+    setMessages(prev => prev.map((m, i) =>
+      i === msgIndex ? { ...m, pendingPlan: { ...m.pendingPlan!, approved: false } } : m
+    ));
+    setInput('');
+    textareaRef.current?.focus();
+  }, []);
 
   const handleConfirm = useCallback(async (msgIndex: number) => {
     const msg = messages[msgIndex];
@@ -298,6 +510,29 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
               LifeOS Copilot
             </SheetTitle>
             <div className="flex items-center gap-1">
+              {/* Mode toggle */}
+              <div className="flex items-center rounded-md border border-border overflow-hidden mr-1">
+                <button
+                  onClick={() => setMode('chat')}
+                  className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                    mode === 'chat'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Chat
+                </button>
+                <button
+                  onClick={() => setMode('plan_do')}
+                  className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                    mode === 'plan_do'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Plan & Do
+                </button>
+              </div>
               <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => { loadThreads().then(setThreads); setShowThreadList(true); }}>
                 <MessageSquare className="h-3 w-3 mr-1" /> History
               </Button>
@@ -314,14 +549,26 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
             {messages.length === 0 && (
               <div className="text-center py-12 space-y-3">
                 <Bot className="h-10 w-10 text-muted-foreground mx-auto" />
-                <p className="text-sm text-muted-foreground">Ask me anything about your LifeOS data, or tell me to take action.</p>
+                <p className="text-sm text-muted-foreground">
+                  {mode === 'plan_do'
+                    ? 'Tell me what to do. I\'ll create a plan for your approval before acting.'
+                    : 'Ask me anything about your LifeOS data, or tell me to take action.'}
+                </p>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  {['What\'s my plan today?', 'Show overdue tasks', 'Create a focus block', 'Triage my inbox'].map(s => (
-                    <button key={s} onClick={() => sendMessage(s)}
-                      className="text-xs px-3 py-1.5 rounded-full border border-border hover:bg-muted/50 transition-colors text-muted-foreground">
-                      {s}
-                    </button>
-                  ))}
+                  {mode === 'plan_do'
+                    ? ['Create 3 tasks for my thesis', 'Triage my inbox', 'Schedule focus time tomorrow'].map(s => (
+                        <button key={s} onClick={() => sendMessage(s)}
+                          className="text-xs px-3 py-1.5 rounded-full border border-border hover:bg-muted/50 transition-colors text-muted-foreground">
+                          {s}
+                        </button>
+                      ))
+                    : ['What\'s my plan today?', 'Show overdue tasks', 'Create a focus block', 'Triage my inbox'].map(s => (
+                        <button key={s} onClick={() => sendMessage(s)}
+                          className="text-xs px-3 py-1.5 rounded-full border border-border hover:bg-muted/50 transition-colors text-muted-foreground">
+                          {s}
+                        </button>
+                      ))
+                  }
                 </div>
               </div>
             )}
@@ -346,6 +593,18 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
                       <p>{msg.content}</p>
                     )}
                   </div>
+
+                  {/* Plan Preview */}
+                  {msg.pendingPlan && (
+                    <PlanPreviewCard
+                      plan={msg.pendingPlan}
+                      onApprove={() => handleApprovePlan(i)}
+                      onCancel={() => handleCancelPlan(i)}
+                      onEdit={() => handleEditPlan(i)}
+                      isExecuting={isStreaming}
+                      executionResult={executionResults.get(i)}
+                    />
+                  )}
 
                   {/* Confirmation UI */}
                   {msg.pendingConfirmation && msg.pendingConfirmation.confirmed === undefined && (
@@ -479,7 +738,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask or instruct Copilot..."
+              placeholder={mode === 'plan_do' ? 'Describe what you want done…' : 'Ask or instruct Copilot...'}
               className="min-h-[40px] max-h-[120px] resize-none text-sm"
               rows={1}
               disabled={isStreaming}
@@ -495,7 +754,9 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
             )}
           </div>
           <p className="text-[9px] text-muted-foreground mt-1.5 text-center">
-            All tools execute server-side. Destructive actions require approval.
+            {mode === 'plan_do'
+              ? 'Plan & Do: Copilot will propose a plan for your approval before acting.'
+              : 'All tools execute server-side. Destructive actions require approval.'}
           </p>
         </div>
       </SheetContent>

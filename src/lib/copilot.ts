@@ -8,6 +8,7 @@ export interface CopilotMessage {
   actionsTaken?: string[];
   dataUsed?: string[];
   pendingConfirmation?: PendingConfirmation;
+  pendingPlan?: CopilotPlan;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   toolResult?: Record<string, unknown>;
@@ -33,6 +34,36 @@ export interface CopilotThread {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── Plan types ──
+export interface PlanStep {
+  label: string;
+  tool: string;
+  args: Record<string, unknown>;
+  requires_confirmation: boolean;
+  expected_impact: { creates: number; updates: number; deletes: number };
+}
+
+export interface CopilotPlan {
+  title: string;
+  goal: string;
+  steps: PlanStep[];
+  overall_impact: { creates: number; updates: number; deletes: number };
+  assumptions: string[];
+  questions: string[];
+  approved?: boolean; // undefined = pending, true = approved, false = cancelled
+}
+
+export interface ToolRun {
+  stepIndex: number;
+  tool: string;
+  ok: boolean;
+  summary: string;
+  entities: { kind: string; id: string; title: string; route: string }[];
+  error?: string;
+}
+
+export type CopilotMode = 'chat' | 'plan_do';
 
 // ── API Client ──
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/copilot`;
@@ -89,13 +120,15 @@ export async function deleteThread(threadId: string): Promise<void> {
   await supabase.from('copilot_threads').delete().eq('id', threadId);
 }
 
-// ── Send Message (server-side execution) ──
+// ── Send Message (supports both chat and plan_do modes) ──
 export async function sendCopilotMessage({
   message,
   threadId,
   clientContext,
+  mode = 'chat',
   onContent,
   onConfirmationRequired,
+  onPlanGenerated,
   onMetadata,
   onDone,
   onError,
@@ -104,8 +137,10 @@ export async function sendCopilotMessage({
   message: string;
   threadId?: string | null;
   clientContext?: { timezone?: string; weekStart?: string };
+  mode?: CopilotMode;
   onContent: (content: string) => void;
   onConfirmationRequired: (confirmation: PendingConfirmation, partialContent: string, threadId: string) => void;
+  onPlanGenerated?: (plan: CopilotPlan, threadId: string) => void;
   onMetadata: (actionsTaken: string[], dataUsed: string[], threadId: string) => void;
   onDone: (threadId: string) => void;
   onError: (error: string) => void;
@@ -116,24 +151,36 @@ export async function sendCopilotMessage({
     const resp = await fetch(CHAT_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ message, threadId, clientContext }),
+      body: JSON.stringify({ message, threadId, clientContext, mode }),
       signal: abortSignal,
     });
 
     if (!resp.ok) {
       const errData = await resp.json().catch(() => ({ message: `HTTP ${resp.status}` }));
       const errMsg = errData.message || errData.error || `Error ${resp.status}`;
-      // Pass structured error info so UI can extract requestId
       onError(JSON.stringify({ message: errMsg, requestId: errData.requestId, stage: errData.stage, status: resp.status }));
       return;
     }
 
     const contentType = resp.headers.get('Content-Type') || '';
 
-    // JSON response (confirmation, final)
+    // JSON response
     if (contentType.includes('application/json')) {
       const data = await resp.json();
       const rThreadId = data.threadId || threadId || '';
+
+      // Plan response
+      if (data.type === 'plan' && data.plan) {
+        onPlanGenerated?.(data.plan, rThreadId);
+        return;
+      }
+
+      // Needs followup
+      if (data.type === 'needs_followup') {
+        onContent(data.question || 'Could you provide more details?');
+        onDone(rThreadId);
+        return;
+      }
 
       if (data.type === 'confirmation_required') {
         onMetadata(data.actionsTaken || [], data.dataUsed || [], rThreadId);
@@ -258,4 +305,52 @@ export async function confirmCopilotAction({
   } catch (err: any) {
     onError(err.message || 'Network error');
   }
+}
+
+// ── Plan approval ──
+export async function approvePlan({
+  plan,
+  threadId,
+  onDone,
+  onError,
+}: {
+  plan: CopilotPlan;
+  threadId: string;
+  onDone: (summary: string, toolRuns: ToolRun[], actionsTaken: string[]) => void;
+  onError: (error: string) => void;
+}) {
+  try {
+    const headers = await getAuthHeaders();
+    const resp = await fetch(`${CHAT_URL}/approve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ threadId, plan }),
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
+      onError(errData.error || `Error ${resp.status}`);
+      return;
+    }
+
+    const data = await resp.json();
+    onDone(data.summary || '', data.toolRuns || [], data.actionsTaken || []);
+  } catch (err: any) {
+    onError(err.message || 'Network error');
+  }
+}
+
+export async function cancelPlan({
+  threadId,
+}: {
+  threadId: string;
+}) {
+  try {
+    const headers = await getAuthHeaders();
+    await fetch(`${CHAT_URL}/cancel`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ threadId }),
+    });
+  } catch { /* best effort */ }
 }

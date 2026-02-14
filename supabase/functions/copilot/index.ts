@@ -7,13 +7,13 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── Route mapping (shared constant) ──
+// ── Route mapping ──
 const ROUTE_MAP: Record<string, string> = {
   task: "/tasks", goal: "/goals", note: "/notes",
   inbox: "/inbox", event: "/calendar", focus: "/calendar", habit: "/habits",
 };
 
-// ── Shared expansion prompt (same as semantic-search) ──
+// ── Shared expansion prompt ──
 const EXPANSION_SYSTEM_PROMPT = `You are a search query expander for a personal productivity app (tasks, goals, events, habits, notes, inbox items, focus blocks).
 Given a user's search query, output a JSON array of 3-5 alternative search terms including synonyms, related words, and rephrased versions.
 Output ONLY a JSON array of strings, nothing else.
@@ -190,11 +190,9 @@ function filterByTimeHint(results: SearchResult[], hint: string): SearchResult[]
 
   const filtered = results.filter(r => {
     const meta = r.metadata as any;
-    // Check due_date for tasks
     if (r.entity_type === "task" && meta?.dueDate) {
       return meta.dueDate >= window.start && meta.dueDate <= window.end;
     }
-    // Check start for events/focus
     if ((r.entity_type === "event" || r.entity_type === "focus") && meta?.start) {
       const startDate = (meta.start as string).slice(0, 10);
       return startDate >= window.start && startDate <= window.end;
@@ -202,7 +200,6 @@ function filterByTimeHint(results: SearchResult[], hint: string): SearchResult[]
     return false;
   });
 
-  // If filtering yields 0, fall back to unfiltered
   return filtered.length > 0 ? filtered : results;
 }
 
@@ -212,21 +209,17 @@ async function buildRetrievalContext(
   userId: string, userMessage: string, apiKey: string,
   clientContext?: { timezone?: string; weekStart?: string },
 ): Promise<{ contextJson: string; intent: Intent }> {
-  // 1. Extract intent
   const intent = await extractIntent(apiKey, userMessage);
   console.log("Intent:", JSON.stringify(intent));
 
-  // 2. Retrieve via unified search
   const { results } = await performSearch(
     supabase, userId, userMessage, intent.entity_types, 12, apiKey,
   );
 
-  // 3. Apply time filtering
   const filtered = intent.time_hint !== "none"
     ? filterByTimeHint(results, intent.time_hint)
     : results;
 
-  // 4. Load minimal profile
   const { data: profile } = await supabase.from("profiles")
     .select("first_name, timezone, week_start, modules")
     .eq("id", userId).single();
@@ -274,6 +267,38 @@ RULES:
 11. IMPORTANT: Only reference entity IDs that appear in the retrieved context or search results. Never invent IDs.
 12. When referencing items, include their route so users can navigate to them.`;
 
+// ── Planning system prompt ──
+const PLANNING_SYSTEM_PROMPT = `You are LifeOS Copilot in PLANNING mode. You produce a structured action plan — NOT free text.
+
+OUTPUT FORMAT: You MUST output ONLY a JSON object matching this exact schema:
+{
+  "title": "Short plan title",
+  "goal": "create|update|schedule|triage|summarize",
+  "steps": [
+    {
+      "label": "Human-readable step description",
+      "tool": "tool_name",
+      "args": { ... tool arguments ... },
+      "requires_confirmation": false,
+      "expected_impact": { "creates": 0, "updates": 0, "deletes": 0 }
+    }
+  ],
+  "overall_impact": { "creates": 0, "updates": 0, "deletes": 0 },
+  "assumptions": ["assumption 1"],
+  "questions": []
+}
+
+RULES:
+1. Output ONLY the JSON plan. No markdown, no explanation, no wrapping.
+2. Use ONLY entity IDs from the retrieved context. NEVER invent IDs.
+3. If you need to find entities first, include a search_lifeos step BEFORE referencing them.
+4. Prefer minimal actions. Don't add unnecessary steps.
+5. If the request is ambiguous or you need clarification, output: {"status":"needs_followup","question":"...","choices":["option1","option2"]}
+6. No deletes unless user explicitly asked for deletion.
+7. If updates > 3, set requires_confirmation=true on those steps.
+8. Max 6 steps per plan.
+9. Available tools: search_lifeos, create_task, update_task, schedule_task_focus_block, create_event, create_goal, triage_inbox, apply_template.`;
+
 const TOOLS = [
   {
     type: "function",
@@ -287,7 +312,7 @@ const TOOLS = [
           types: {
             type: "array",
             items: { type: "string", enum: ["task", "goal", "event", "focus", "habit", "inbox", "note"] },
-            description: "Which entity types to search (uses search_index entity_type values)",
+            description: "Which entity types to search",
           },
           limit: { type: "number", description: "Max results (default 12)" },
         },
@@ -780,8 +805,76 @@ function describeAction(name: string, args: Record<string, unknown>): string {
       return `Convert ${ids.length} inbox item(s) to ${args.convertTo}`;
     }
     case "apply_template": return `Apply template ${args.templateId} on ${args.runDate}`;
+    case "create_task": return `Create task "${args.title}"`;
+    case "update_task": return `Update task ${args.id}`;
+    case "create_event": return `Create event "${args.title}"`;
+    case "create_goal": return `Create goal "${args.title}"`;
+    case "schedule_task_focus_block": return `Schedule focus block for task ${args.taskId}`;
     default: return `${name}(${JSON.stringify(args).slice(0, 80)})`;
   }
+}
+
+// ── Plan validation ──
+interface PlanStep {
+  label: string;
+  tool: string;
+  args: Record<string, unknown>;
+  requires_confirmation: boolean;
+  expected_impact: { creates: number; updates: number; deletes: number };
+}
+
+interface Plan {
+  title: string;
+  goal: string;
+  steps: PlanStep[];
+  overall_impact: { creates: number; updates: number; deletes: number };
+  assumptions: string[];
+  questions: string[];
+}
+
+interface ToolRun {
+  stepIndex: number;
+  tool: string;
+  ok: boolean;
+  summary: string;
+  entities: { kind: string; id: string; title: string; route: string }[];
+  error?: string;
+}
+
+const VALID_TOOLS = new Set(["search_lifeos", "create_task", "update_task", "schedule_task_focus_block", "create_event", "create_goal", "triage_inbox", "apply_template"]);
+
+function validatePlan(raw: any): { valid: boolean; plan?: Plan; error?: string } {
+  if (!raw || typeof raw !== "object") return { valid: false, error: "Plan must be a JSON object" };
+  if (!raw.title || typeof raw.title !== "string") return { valid: false, error: "Plan must have a title" };
+  if (!Array.isArray(raw.steps) || raw.steps.length === 0) return { valid: false, error: "Plan must have at least one step" };
+  if (raw.steps.length > 6) return { valid: false, error: "Plan cannot have more than 6 steps" };
+
+  for (let i = 0; i < raw.steps.length; i++) {
+    const step = raw.steps[i];
+    if (!step.tool || !VALID_TOOLS.has(step.tool)) return { valid: false, error: `Step ${i + 1}: invalid tool "${step.tool}"` };
+    if (!step.args || typeof step.args !== "object") return { valid: false, error: `Step ${i + 1}: missing args` };
+  }
+
+  // Safety: block deletes unless explicitly planned
+  const overall = raw.overall_impact || { creates: 0, updates: 0, deletes: 0 };
+  if (overall.deletes > 0) return { valid: false, error: "Plans with deletions are not supported in v1" };
+
+  const plan: Plan = {
+    title: raw.title,
+    goal: raw.goal || "create",
+    steps: raw.steps.map((s: any) => ({
+      label: s.label || describeAction(s.tool, s.args),
+      tool: s.tool,
+      args: s.args,
+      requires_confirmation: !!s.requires_confirmation,
+      expected_impact: s.expected_impact || { creates: 0, updates: 0, deletes: 0 },
+    })),
+    overall_impact: overall,
+    assumptions: Array.isArray(raw.assumptions) ? raw.assumptions : [],
+    questions: Array.isArray(raw.questions) ? raw.questions : [],
+  };
+
+  return { valid: true, plan };
 }
 
 // AI call helpers
@@ -806,6 +899,19 @@ async function callAIStreaming(apiKey: string, messages: any[], tools: any[]): P
   });
 }
 
+async function callAIPlanning(apiKey: string, messages: any[]): Promise<any> {
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages, max_tokens: 2048 }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`AI planning error ${resp.status}: ${text}`);
+  }
+  return await resp.json();
+}
+
 // Rate limiting
 const requestLog: { ts: number }[] = [];
 const MAX_REQUESTS_PER_MINUTE = 10;
@@ -817,6 +923,27 @@ function checkRateLimit(): boolean {
   return true;
 }
 
+// ── Common auth + setup ──
+async function authenticateRequest(req: Request, requestId: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!supabaseUrl || !supabaseAnonKey || !lovableKey) throw new Error("Missing env vars");
+
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) throw new Error("Missing Authorization header");
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) throw new Error("Unauthorized");
+  const userId = userData.user.id;
+
+  return { supabase, userId, lovableKey };
+}
+
 serve(async (req) => {
   const requestId = crypto.randomUUID();
   const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
@@ -825,56 +952,119 @@ serve(async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
+  // Parse URL path for sub-routes
+  const url = new URL(req.url);
+  const pathParts = url.pathname.split("/").filter(Boolean);
+  // pathParts = ["copilot"] or ["copilot","approve"] or ["copilot","cancel"]
+  const subRoute = pathParts.length > 1 ? pathParts[pathParts.length - 1] : null;
+
   let stage = "init";
   try {
-    // ── Env validation ──
-    stage = "env_validation";
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!supabaseUrl) throw new Error("Missing env: SUPABASE_URL");
-    if (!supabaseAnonKey) throw new Error("Missing env: SUPABASE_ANON_KEY");
-    if (!lovableKey) throw new Error("Missing env: LOVABLE_API_KEY");
-    console.log(`[${requestId}] env OK`);
-
-    // ── Rate limit ──
     stage = "rate_limit";
     if (!checkRateLimit()) {
       return new Response(JSON.stringify({ ok: false, stage, message: "Rate limit exceeded.", requestId }), { status: 429, headers: jsonHeaders });
     }
 
-    // ── Auth ──
     stage = "auth";
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ ok: false, stage, message: "Missing Authorization header", requestId }), { status: 401, headers: jsonHeaders });
-    }
+    const { supabase, userId, lovableKey: LOVABLE_API_KEY } = await authenticateRequest(req, requestId);
+    console.log(`[${requestId}] auth OK, user=${userId.slice(0, 8)}..., subRoute=${subRoute}`);
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
-      console.error(`[${requestId}] auth failed:`, userError?.message);
-      return new Response(JSON.stringify({ ok: false, stage, message: "Unauthorized", requestId }), { status: 401, headers: jsonHeaders });
-    }
-    const userId = userData.user.id;
-    console.log(`[${requestId}] auth OK, user=${userId.slice(0, 8)}...`);
-
-    // ── Parse body ──
     stage = "parse_request";
     let body: any;
     try {
       const rawText = await req.text();
-      console.log(`[${requestId}] body length=${rawText.length}`);
       body = JSON.parse(rawText);
     } catch {
       return new Response(JSON.stringify({ ok: false, stage, message: "Invalid JSON body", requestId }), { status: 400, headers: jsonHeaders });
     }
-    const { message, threadId, clientContext, confirmedActionId, confirmedToolCalls } = body;
 
-    const LOVABLE_API_KEY = lovableKey;
+    // ════════════════════════════════════════
+    // SUB-ROUTE: /copilot/approve
+    // ════════════════════════════════════════
+    if (subRoute === "approve") {
+      stage = "plan_approve";
+      const { threadId, plan: rawPlan } = body;
+      if (!threadId || !rawPlan) {
+        return new Response(JSON.stringify({ error: "threadId and plan required" }), { status: 400, headers: jsonHeaders });
+      }
+
+      const { valid, plan, error: planErr } = validatePlan(rawPlan);
+      if (!valid || !plan) {
+        return new Response(JSON.stringify({ error: `Invalid plan: ${planErr}` }), { status: 400, headers: jsonHeaders });
+      }
+
+      // Execute steps sequentially
+      const toolRuns: ToolRun[] = [];
+      const allActionsTaken: string[] = [];
+
+      for (let i = 0; i < plan.steps.length; i++) {
+        const step = plan.steps[i];
+        try {
+          const result = await executeTool(supabase, userId, LOVABLE_API_KEY, step.tool, step.args);
+          const entities = (result.createdEntities || []).map(e => ({
+            kind: e.type, id: e.id,
+            title: (step.args.title as string) || step.label,
+            route: ROUTE_MAP[e.type] || "/",
+          }));
+
+          toolRuns.push({
+            stepIndex: i, tool: step.tool,
+            ok: !result.output.error,
+            summary: result.actionsTaken.join("; ") || step.label,
+            entities,
+            error: result.output.error as string | undefined,
+          });
+
+          allActionsTaken.push(...result.actionsTaken);
+
+          await logAudit(supabase, userId, threadId, step.tool, step.args,
+            result.output.error ? "failed" : "success",
+            result.output.error as string | undefined, result.createdEntities);
+          await persistMessage(supabase, threadId, userId, "tool",
+            JSON.stringify(result.output), step.tool, step.args, result.output);
+        } catch (err: any) {
+          toolRuns.push({
+            stepIndex: i, tool: step.tool, ok: false,
+            summary: `Failed: ${err.message}`, entities: [],
+            error: err.message,
+          });
+          await logAudit(supabase, userId, threadId, step.tool, step.args, "error", err.message);
+          // Stop on error
+          break;
+        }
+      }
+
+      // Generate summary
+      const successCount = toolRuns.filter(r => r.ok).length;
+      const summaryText = `✅ Plan "${plan.title}" executed: ${successCount}/${plan.steps.length} steps completed. ${allActionsTaken.join(". ")}`;
+      await persistMessage(supabase, threadId, userId, "assistant", summaryText);
+
+      return new Response(JSON.stringify({
+        status: "executed",
+        summary: summaryText,
+        toolRuns,
+        actionsTaken: allActionsTaken,
+        threadId,
+      }), { headers: jsonHeaders });
+    }
+
+    // ════════════════════════════════════════
+    // SUB-ROUTE: /copilot/cancel
+    // ════════════════════════════════════════
+    if (subRoute === "cancel") {
+      stage = "plan_cancel";
+      const { threadId } = body;
+      if (threadId) {
+        await persistMessage(supabase, threadId, userId, "assistant", "Plan cancelled by user.");
+      }
+      return new Response(JSON.stringify({ status: "cancelled", threadId }), { headers: jsonHeaders });
+    }
+
+    // ════════════════════════════════════════
+    // MAIN ROUTE: /copilot (chat or plan_do)
+    // ════════════════════════════════════════
+    const { message, threadId, clientContext, confirmedActionId, confirmedToolCalls, mode } = body;
+    const copilotMode = mode || "chat"; // "chat" or "plan_do"
 
     // ── Resolve or create thread ──
     stage = "resolve_thread";
@@ -890,7 +1080,7 @@ serve(async (req) => {
       currentThreadId = thread.id;
     }
 
-    // ── Confirmation execution ──
+    // ── Confirmation execution (existing flow) ──
     stage = "confirmation_exec";
     if (confirmedActionId && confirmedToolCalls) {
       const allActions: string[] = [];
@@ -925,14 +1115,95 @@ serve(async (req) => {
       .order("created_at", { ascending: true })
       .limit(20);
 
-    // ── Build retrieval-driven context (replaces memory pack) ──
+    // ── Build retrieval-driven context ──
     stage = "build_context";
     const { contextJson, intent } = await buildRetrievalContext(
       supabase, userId, message || "", LOVABLE_API_KEY, clientContext,
     );
     console.log(`[${requestId}] context built, len=${contextJson.length}, intent=${intent.goal}`);
 
-    // ── Build AI messages ──
+    // ════════════════════════════════════════
+    // PLAN & DO MODE
+    // ════════════════════════════════════════
+    if (copilotMode === "plan_do") {
+      stage = "plan_generate";
+
+      // If intent says needs_followup, return that
+      if (intent.needs_followup && intent.followup_question) {
+        await persistMessage(supabase, currentThreadId!, userId, "assistant", intent.followup_question);
+        return new Response(JSON.stringify({
+          type: "needs_followup",
+          question: intent.followup_question,
+          threadId: currentThreadId,
+        }), { headers: jsonHeaders });
+      }
+
+      // Build planning messages
+      const planMessages: any[] = [
+        { role: "system", content: `${PLANNING_SYSTEM_PROMPT}\n\n## Retrieved Context\n${contextJson}` },
+      ];
+      for (const m of (dbMessages || [])) {
+        if (m.role === "tool") continue;
+        planMessages.push({ role: m.role === "system" ? "user" : m.role, content: m.content });
+      }
+
+      const planResp = await callAIPlanning(LOVABLE_API_KEY, planMessages);
+      const planContent = planResp.choices?.[0]?.message?.content || "";
+
+      // Try to parse as JSON
+      const jsonMatch = planContent.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        // Model didn't return JSON, treat as chat fallback
+        await persistMessage(supabase, currentThreadId!, userId, "assistant", planContent);
+        return new Response(JSON.stringify({
+          type: "final",
+          content: planContent,
+          threadId: currentThreadId,
+          actionsTaken: [], dataUsed: [],
+        }), { headers: jsonHeaders });
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // Check if it's a needs_followup response
+      if (parsed.status === "needs_followup") {
+        const q = parsed.question || "Could you provide more details?";
+        await persistMessage(supabase, currentThreadId!, userId, "assistant", q);
+        return new Response(JSON.stringify({
+          type: "needs_followup",
+          question: q,
+          choices: parsed.choices || [],
+          threadId: currentThreadId,
+        }), { headers: jsonHeaders });
+      }
+
+      // Validate plan
+      const { valid, plan, error: planErr } = validatePlan(parsed);
+      if (!valid) {
+        const errMsg = `I couldn't generate a valid plan: ${planErr}. Could you rephrase your request?`;
+        await persistMessage(supabase, currentThreadId!, userId, "assistant", errMsg);
+        return new Response(JSON.stringify({
+          type: "final",
+          content: errMsg,
+          threadId: currentThreadId,
+          actionsTaken: [], dataUsed: [],
+        }), { headers: jsonHeaders });
+      }
+
+      // Persist the plan as a message for history
+      await persistMessage(supabase, currentThreadId!, userId, "assistant",
+        `📋 Plan: ${plan!.title}\n${plan!.steps.map((s, i) => `${i + 1}. ${s.label}`).join("\n")}`);
+
+      return new Response(JSON.stringify({
+        type: "plan",
+        plan: plan!,
+        threadId: currentThreadId,
+      }), { headers: jsonHeaders });
+    }
+
+    // ════════════════════════════════════════
+    // CHAT MODE (existing flow)
+    // ════════════════════════════════════════
     const aiMessages: any[] = [
       { role: "system", content: `${SYSTEM_PROMPT}\n\n## Retrieved Context\n${contextJson}` },
     ];
