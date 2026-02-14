@@ -23,20 +23,20 @@ export async function fetchAllUserData(userId: string): Promise<AppData> {
     { data: logs },
     { data: pinnedRows },
   ] = await Promise.all([
-    supabase.from('tasks').select('*').eq('user_id', userId),
-    supabase.from('goals').select('*').eq('user_id', userId),
-    supabase.from('calendar_events').select('*').eq('user_id', userId),
-    supabase.from('focus_blocks').select('*').eq('user_id', userId),
-    supabase.from('habits').select('*').eq('user_id', userId),
+    supabase.from('tasks').select('*').eq('user_id', userId).is('deleted_at', null),
+    supabase.from('goals').select('*').eq('user_id', userId).is('deleted_at', null),
+    supabase.from('calendar_events').select('*').eq('user_id', userId).is('deleted_at', null),
+    supabase.from('focus_blocks').select('*').eq('user_id', userId).is('deleted_at', null),
+    supabase.from('habits').select('*').eq('user_id', userId).is('deleted_at', null),
     supabase.from('daily_checkins').select('*').eq('user_id', userId),
     supabase.from('life_score_snapshots').select('*').eq('user_id', userId),
     supabase.from('weekly_plans').select('*').eq('user_id', userId),
     supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(200),
     supabase.from('notification_settings').select('*').eq('id', userId).single(),
-    supabase.from('inbox_items').select('*').eq('user_id', userId),
-    supabase.from('notes').select('*').eq('user_id', userId),
-    supabase.from('templates').select('*').eq('user_id', userId),
-    supabase.from('automation_rules').select('*').eq('user_id', userId),
+    supabase.from('inbox_items').select('*').eq('user_id', userId).is('deleted_at', null),
+    supabase.from('notes').select('*').eq('user_id', userId).is('deleted_at', null),
+    supabase.from('templates').select('*').eq('user_id', userId).is('deleted_at', null),
+    supabase.from('automation_rules').select('*').eq('user_id', userId).is('deleted_at', null),
     supabase.from('automation_run_logs').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(100),
     supabase.from('pinned_focus').select('*').eq('user_id', userId),
   ]);
@@ -183,7 +183,7 @@ export async function dbUpsertTask(userId: string, task: Task) {
   } as any);
 }
 export async function dbDeleteTask(userId: string, id: string) {
-  await supabase.from('tasks').delete().eq('id', id).eq('user_id', userId);
+  await supabase.from('tasks').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
 }
 export async function dbUpsertGoal(userId: string, goal: Goal) {
   await supabase.from('goals').upsert({
@@ -194,7 +194,7 @@ export async function dbUpsertGoal(userId: string, goal: Goal) {
   } as any);
 }
 export async function dbDeleteGoal(userId: string, id: string) {
-  await supabase.from('goals').delete().eq('id', id).eq('user_id', userId);
+  await supabase.from('goals').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
 }
 export async function dbUpsertEvent(userId: string, event: CalendarEvent) {
   await supabase.from('calendar_events').upsert({
@@ -204,7 +204,7 @@ export async function dbUpsertEvent(userId: string, event: CalendarEvent) {
   } as any);
 }
 export async function dbDeleteEvent(userId: string, id: string) {
-  await supabase.from('calendar_events').delete().eq('id', id).eq('user_id', userId);
+  await supabase.from('calendar_events').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
 }
 export async function dbUpsertFocusBlock(userId: string, fb: FocusBlock) {
   await supabase.from('focus_blocks').upsert({
@@ -214,7 +214,7 @@ export async function dbUpsertFocusBlock(userId: string, fb: FocusBlock) {
   } as any);
 }
 export async function dbDeleteFocusBlock(userId: string, id: string) {
-  await supabase.from('focus_blocks').delete().eq('id', id).eq('user_id', userId);
+  await supabase.from('focus_blocks').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
 }
 export async function dbUpsertHabit(userId: string, habit: Habit) {
   await supabase.from('habits').upsert({
@@ -224,7 +224,7 @@ export async function dbUpsertHabit(userId: string, habit: Habit) {
   } as any);
 }
 export async function dbDeleteHabit(userId: string, id: string) {
-  await supabase.from('habits').delete().eq('id', id).eq('user_id', userId);
+  await supabase.from('habits').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
 }
 export async function dbUpsertCheckIn(userId: string, ci: DailyCheckIn) {
   await supabase.from('daily_checkins').upsert({
@@ -275,7 +275,7 @@ export async function dbUpsertInboxItem(userId: string, item: InboxItem) {
   } as any);
 }
 export async function dbDeleteInboxItem(userId: string, id: string) {
-  await supabase.from('inbox_items').delete().eq('id', id).eq('user_id', userId);
+  await supabase.from('inbox_items').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
 }
 export async function dbUpsertNote(userId: string, note: Note) {
   await supabase.from('notes').upsert({
@@ -284,7 +284,7 @@ export async function dbUpsertNote(userId: string, note: Note) {
   } as any);
 }
 export async function dbDeleteNote(userId: string, id: string) {
-  await supabase.from('notes').delete().eq('id', id).eq('user_id', userId);
+  await supabase.from('notes').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
 }
 export async function dbUpsertTemplate(userId: string, t: Template) {
   await supabase.from('templates').upsert({
@@ -293,7 +293,7 @@ export async function dbUpsertTemplate(userId: string, t: Template) {
   } as any);
 }
 export async function dbDeleteTemplate(userId: string, id: string) {
-  await supabase.from('templates').delete().eq('id', id).eq('user_id', userId);
+  await supabase.from('templates').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
 }
 export async function dbUpsertAutomationRule(userId: string, r: AutomationRule) {
   await supabase.from('automation_rules').upsert({
@@ -302,7 +302,7 @@ export async function dbUpsertAutomationRule(userId: string, r: AutomationRule) 
   } as any);
 }
 export async function dbDeleteAutomationRule(userId: string, id: string) {
-  await supabase.from('automation_rules').delete().eq('id', id).eq('user_id', userId);
+  await supabase.from('automation_rules').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
 }
 export async function dbInsertAutomationLog(userId: string, log: AutomationRunLog) {
   await supabase.from('automation_run_logs').insert({
