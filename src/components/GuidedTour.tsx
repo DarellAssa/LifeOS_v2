@@ -13,6 +13,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+/* ─── Types ─── */
+
 export interface TourStep {
   id: string;
   targetSelector: string;
@@ -23,14 +25,17 @@ export interface TourStep {
   requiredModule?: string;
 }
 
+type TourStatus = 'idle' | 'navigating' | 'waiting_target' | 'showing' | 'completed';
+
+/* ─── Persistence ─── */
+
 const TOUR_COMPLETED_KEY = 'lifeos-tour-completed';
 
 function isTourCompleted(userId: string): boolean {
   try {
     const val = localStorage.getItem(TOUR_COMPLETED_KEY);
     if (!val) return false;
-    const parsed = JSON.parse(val);
-    return parsed[userId] === true;
+    return JSON.parse(val)[userId] === true;
   } catch { return false; }
 }
 
@@ -52,28 +57,31 @@ export function resetTourForUser(userId: string) {
   } catch {}
 }
 
-interface Rect {
-  top: number;
-  left: number;
-  width: number;
-  height: number;
+/* ─── Element readiness check ─── */
+
+function isElementReady(selector: string): HTMLElement | null {
+  const el = document.querySelector<HTMLElement>(selector);
+  if (!el) return null;
+  const rect = el.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  const style = window.getComputedStyle(el);
+  if (style.display === 'none' || style.visibility === 'hidden') return null;
+  return el;
 }
 
-type ResolvedPlacement = 'top' | 'bottom' | 'left' | 'right';
+/* ─── Geometry ─── */
+
+interface Rect { top: number; left: number; width: number; height: number; }
+type Placement = 'top' | 'bottom' | 'left' | 'right';
 
 const TOOLTIP_MAX_W = 360;
 const GAP = 14;
 const SPOT_PAD = 6;
 
-function resolvePlacement(
-  rect: Rect,
-  preferred: ResolvedPlacement,
-  tw: number,
-  th: number,
-): ResolvedPlacement {
+function resolvePlacement(rect: Rect, preferred: Placement, tw: number, th: number): Placement {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const fits = (p: ResolvedPlacement) => {
+  const fits = (p: Placement) => {
     switch (p) {
       case 'right': return rect.left + rect.width + GAP + tw < vw - 12;
       case 'bottom': return rect.top + rect.height + GAP + th < vh - 12;
@@ -82,109 +90,134 @@ function resolvePlacement(
     }
   };
   if (fits(preferred)) return preferred;
-  const fallbacks: ResolvedPlacement[] = ['right', 'bottom', 'left', 'top'];
-  return fallbacks.find(fits) ?? 'bottom';
+  return ['right', 'bottom', 'left', 'top'].find(p => fits(p as Placement)) as Placement ?? 'bottom';
 }
 
-function computePos(
-  rect: Rect,
-  placement: ResolvedPlacement,
-  tw: number,
-  th: number,
-): { top: number; left: number; arrowSide: ResolvedPlacement; arrowOffset: number } {
-  let top = 0;
-  let left = 0;
-
+function computePos(rect: Rect, placement: Placement, tw: number, th: number) {
+  let top = 0, left = 0;
   switch (placement) {
-    case 'right':
-      top = rect.top + rect.height / 2 - th / 2;
-      left = rect.left + rect.width + GAP;
-      break;
-    case 'left':
-      top = rect.top + rect.height / 2 - th / 2;
-      left = rect.left - tw - GAP;
-      break;
-    case 'bottom':
-      top = rect.top + rect.height + GAP;
-      left = rect.left + rect.width / 2 - tw / 2;
-      break;
-    case 'top':
-      top = rect.top - th - GAP;
-      left = rect.left + rect.width / 2 - tw / 2;
-      break;
+    case 'right': top = rect.top + rect.height / 2 - th / 2; left = rect.left + rect.width + GAP; break;
+    case 'left': top = rect.top + rect.height / 2 - th / 2; left = rect.left - tw - GAP; break;
+    case 'bottom': top = rect.top + rect.height + GAP; left = rect.left + rect.width / 2 - tw / 2; break;
+    case 'top': top = rect.top - th - GAP; left = rect.left + rect.width / 2 - tw / 2; break;
   }
-
-  // Clamp
   left = Math.max(12, Math.min(left, window.innerWidth - tw - 12));
   top = Math.max(12, Math.min(top, window.innerHeight - th - 12));
 
-  // Arrow points back toward target center
-  const arrowSide: ResolvedPlacement =
-    placement === 'right' ? 'left' :
-    placement === 'left' ? 'right' :
-    placement === 'bottom' ? 'top' : 'bottom';
-
-  // Arrow offset along the edge (in px from top/left of tooltip)
+  const arrowSide: Placement = placement === 'right' ? 'left' : placement === 'left' ? 'right' : placement === 'bottom' ? 'top' : 'bottom';
   let arrowOffset: number;
   if (placement === 'right' || placement === 'left') {
     arrowOffset = Math.max(16, Math.min(rect.top + rect.height / 2 - top, th - 16));
   } else {
     arrowOffset = Math.max(16, Math.min(rect.left + rect.width / 2 - left, tw - 16));
   }
-
   return { top, left, arrowSide, arrowOffset };
 }
+
+/* ─── Arrow ─── */
+
+function Arrow({ side, offset }: { side: Placement; offset: number }) {
+  const s = 8;
+  const style: React.CSSProperties = { position: 'absolute', pointerEvents: 'none' };
+  let points = '';
+  if (side === 'left') { style.left = -s; style.top = offset - s; points = `${s},0 ${s},${s*2} 0,${s}`; }
+  else if (side === 'right') { style.right = -s; style.top = offset - s; points = `0,0 0,${s*2} ${s},${s}`; }
+  else if (side === 'top') { style.top = -s; style.left = offset - s; points = `0,${s} ${s},0 ${s*2},${s}`; }
+  else { style.bottom = -s; style.left = offset - s; points = `0,0 ${s*2},0 ${s},${s}`; }
+  return (
+    <svg style={style}
+      width={side === 'left' || side === 'right' ? s : s * 2}
+      height={side === 'left' || side === 'right' ? s * 2 : s}>
+      <polygon points={points} className="fill-popover" />
+    </svg>
+  );
+}
+
+/* ─── Retry schedule ─── */
+const RETRY_DELAYS = [100, 200, 400, 800, 1200];
+
+/* ─── Main Component ─── */
 
 export function GuidedTour({ steps }: { steps: TourStep[] }) {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [visible, setVisible] = useState(false);
+
+  const [isActive, setIsActive] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [status, setStatus] = useState<TourStatus>('idle');
   const [showEndScreen, setShowEndScreen] = useState(false);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
-  const [spotlight, setSpotlight] = useState<Rect | null>(null);
-  const [tooltipStyle, setTooltipStyle] = useState<{
-    top: number; left: number; arrowSide: ResolvedPlacement; arrowOffset: number;
-  } | null>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  const retryRef = useRef<number>(0);
+  const [showFallback, setShowFallback] = useState(false);
 
-  // Start tour
+  const [spotlight, setSpotlight] = useState<Rect | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number; arrowSide: Placement; arrowOffset: number } | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  // Debounce guard
+  const lastActionRef = useRef(0);
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Prevent StrictMode double-init
+  const initRef = useRef(false);
+
+  /* ── Start tour ── */
   useEffect(() => {
-    if (!user || !profile) return;
+    if (!user || !profile || steps.length === 0) return;
+    if (initRef.current) return;
     const showTour = profile.preferences?.showTutorial !== false;
-    if (showTour && !isTourCompleted(user.id) && steps.length > 0) {
-      const timer = setTimeout(() => setVisible(true), 900);
-      return () => clearTimeout(timer);
+    if (showTour && !isTourCompleted(user.id)) {
+      initRef.current = true;
+      const timer = setTimeout(() => {
+        setIsActive(true);
+        setCurrentIndex(0);
+        setStatus('waiting_target');
+      }, 900);
+      return () => { clearTimeout(timer); initRef.current = false; };
     }
   }, [user, profile, steps.length]);
 
-  const positionTooltip = useCallback(() => {
-    if (!visible || showEndScreen || currentStep >= steps.length) {
+  /* ── Cleanup retry timers ── */
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, []);
+
+  /* ── Core: attempt to show current step ── */
+  const attemptShow = useCallback(() => {
+    if (!isActive || showEndScreen || currentIndex >= steps.length) return;
+    const step = steps[currentIndex];
+
+    // Check route first
+    if (step.route && location.pathname !== step.route) {
+      setStatus('navigating');
       setSpotlight(null);
-      setTooltipStyle(null);
-      return;
+      setTooltipPos(null);
+      navigate(step.route);
+      return; // Will re-trigger via location.pathname change
     }
-    const step = steps[currentStep];
-    const el = document.querySelector(step.targetSelector);
+
+    // Check element readiness
+    const el = isElementReady(step.targetSelector);
     if (!el) {
-      // If route needed, navigate
-      if (step.route && location.pathname !== step.route && retryRef.current < 2) {
-        retryRef.current++;
-        navigate(step.route);
-        return;
-      }
-      // Skip this step
-      if (currentStep < steps.length - 1) {
-        setCurrentStep(prev => prev + 1);
+      // Retry with backoff
+      if (retryCountRef.current < RETRY_DELAYS.length) {
+        setStatus('waiting_target');
+        const delay = RETRY_DELAYS[retryCountRef.current];
+        retryCountRef.current++;
+        retryTimerRef.current = setTimeout(attemptShow, delay);
       } else {
-        setShowEndScreen(true);
+        // Show fallback
+        setShowFallback(true);
+        setStatus('waiting_target');
       }
       return;
     }
 
-    retryRef.current = 0;
+    // Element found — show it
+    retryCountRef.current = 0;
+    setShowFallback(false);
     el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
     requestAnimationFrame(() => {
@@ -196,30 +229,41 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
         height: r.height + SPOT_PAD * 2,
       };
       setSpotlight(sr);
-
       const tw = Math.min(TOOLTIP_MAX_W, window.innerWidth - 24);
       const th = tooltipRef.current?.offsetHeight ?? 160;
       const placement = resolvePlacement(sr, step.placement, tw, th);
-      setTooltipStyle(computePos(sr, placement, tw, th));
+      setTooltipPos(computePos(sr, placement, tw, th));
+      setStatus('showing');
     });
-  }, [visible, showEndScreen, currentStep, steps, location.pathname, navigate]);
+  }, [isActive, showEndScreen, currentIndex, steps, location.pathname, navigate]);
 
-  // Reposition on step/route changes
+  /* ── Trigger attemptShow when index or route changes ── */
   useEffect(() => {
-    if (!visible || showEndScreen) return;
-    const timer = setTimeout(positionTooltip, 200);
+    if (!isActive || showEndScreen) return;
+    if (status === 'idle' || status === 'completed') return;
+
+    // Clear previous retry chain
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    retryCountRef.current = 0;
+    setShowFallback(false);
+
+    // Small delay to let DOM settle after route change
+    const timer = setTimeout(attemptShow, 150);
     return () => clearTimeout(timer);
-  }, [visible, showEndScreen, currentStep, location.pathname, positionTooltip]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, currentIndex, location.pathname]);
 
+  /* ── Resize handler ── */
   useEffect(() => {
-    if (!visible) return;
-    window.addEventListener('resize', positionTooltip);
-    return () => window.removeEventListener('resize', positionTooltip);
-  }, [visible, positionTooltip]);
+    if (!isActive || status !== 'showing') return;
+    const handler = () => attemptShow();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [isActive, status, attemptShow]);
 
-  // Escape key
+  /* ── Escape key ── */
   useEffect(() => {
-    if (!visible) return;
+    if (!isActive) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -228,27 +272,49 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [visible]);
+  }, [isActive]);
 
-  const handleClose = () => {
-    setVisible(false);
-    setShowEndScreen(false);
-    setShowSkipConfirm(false);
-    if (user) markTourCompleted(user.id);
+  /* ── Actions (debounced) ── */
+  const guardedAction = (fn: () => void) => {
+    const now = Date.now();
+    if (now - lastActionRef.current < 400) return;
+    lastActionRef.current = now;
+    fn();
   };
 
-  const handleNext = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(prev => prev + 1);
+  const handleNext = () => guardedAction(() => {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    if (currentIndex < steps.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setStatus('waiting_target');
+      setSpotlight(null);
+      setTooltipPos(null);
     } else {
       setShowEndScreen(true);
       setSpotlight(null);
-      setTooltipStyle(null);
+      setTooltipPos(null);
+      setStatus('completed');
     }
-  };
+  });
 
-  const handleBack = () => {
-    if (currentStep > 0) setCurrentStep(prev => prev - 1);
+  const handleBack = () => guardedAction(() => {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+      setStatus('waiting_target');
+      setSpotlight(null);
+      setTooltipPos(null);
+    }
+  });
+
+  const handleClose = () => {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    setIsActive(false);
+    setShowEndScreen(false);
+    setShowSkipConfirm(false);
+    setShowFallback(false);
+    setStatus('completed');
+    if (user) markTourCompleted(user.id);
   };
 
   const handleFinish = () => {
@@ -256,58 +322,65 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
     navigate('/');
   };
 
-  if (!visible || steps.length === 0) return null;
-
-  const step = steps[currentStep];
-  const isLast = currentStep === steps.length - 1;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-
-  // Arrow component
-  const Arrow = ({ side, offset }: { side: ResolvedPlacement; offset: number }) => {
-    const size = 8;
-    const style: React.CSSProperties = { position: 'absolute' };
-    let points = '';
-
-    if (side === 'left') {
-      style.left = -size;
-      style.top = offset - size;
-      points = `${size},0 ${size},${size * 2} 0,${size}`;
-    } else if (side === 'right') {
-      style.right = -size;
-      style.top = offset - size;
-      points = `0,0 0,${size * 2} ${size},${size}`;
-    } else if (side === 'top') {
-      style.top = -size;
-      style.left = offset - size;
-      points = `0,${size} ${size},0 ${size * 2},${size}`;
-    } else {
-      style.bottom = -size;
-      style.left = offset - size;
-      points = `0,0 ${size * 2},0 ${size},${size}`;
-    }
-
-    return (
-      <svg
-        style={{ ...style, pointerEvents: 'none' }}
-        width={side === 'left' || side === 'right' ? size : size * 2}
-        height={side === 'left' || side === 'right' ? size * 2 : size}
-      >
-        <polygon points={points} className="fill-popover" />
-      </svg>
-    );
+  const handleRetry = () => {
+    retryCountRef.current = 0;
+    setShowFallback(false);
+    attemptShow();
   };
 
-  // End screen
-  if (showEndScreen) {
-    return (
-      <>
-        <div className="fixed inset-0 z-[9998] bg-black/70" />
+  const handleSkipStep = () => guardedAction(() => {
+    setShowFallback(false);
+    if (currentIndex < steps.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setStatus('waiting_target');
+    } else {
+      setShowEndScreen(true);
+      setStatus('completed');
+    }
+  });
+
+  /* ── Render guards ── */
+  if (!isActive || steps.length === 0) return null;
+
+  const step = steps[currentIndex];
+  const isLast = currentIndex === steps.length - 1;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const isShowing = status === 'showing' && spotlight && tooltipPos;
+  const isWaiting = status === 'waiting_target' || status === 'navigating';
+
+  return (
+    <>
+      {/* Overlay */}
+      <svg className="fixed inset-0 z-[9998]" width={vw} height={vh} style={{ pointerEvents: 'none' }}>
+        <defs>
+          <mask id="tour-mask">
+            <rect x="0" y="0" width={vw} height={vh} fill="white" />
+            {isShowing && spotlight && (
+              <rect x={spotlight.left} y={spotlight.top} width={spotlight.width} height={spotlight.height} rx={8} ry={8} fill="black" />
+            )}
+          </mask>
+        </defs>
+        <rect x="0" y="0" width={vw} height={vh}
+          fill="rgba(0,0,0,0.7)" mask="url(#tour-mask)"
+          style={{ pointerEvents: 'auto' }} />
+        {isShowing && spotlight && (
+          <rect
+            x={spotlight.left - 2} y={spotlight.top - 2}
+            width={spotlight.width + 4} height={spotlight.height + 4}
+            rx={10} ry={10} fill="none"
+            stroke="hsl(var(--primary) / 0.35)" strokeWidth="1.5"
+            style={{ pointerEvents: 'none' }}>
+            <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="2" />
+          </rect>
+        )}
+      </svg>
+
+      {/* End screen */}
+      {showEndScreen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-          <div
-            className="w-full max-w-sm rounded-xl border border-border bg-popover p-6 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200"
-            onClick={e => e.stopPropagation()}
-          >
+          <div className="w-full max-w-sm rounded-xl border border-border bg-popover p-6 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}>
             <div className="text-center space-y-4">
               <h2 className="text-lg font-semibold text-foreground">Start small.</h2>
               <div className="space-y-1 text-sm text-muted-foreground">
@@ -315,118 +388,67 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
                 <p>Create one task.</p>
                 <p>Schedule one focus block.</p>
               </div>
-              <Button className="w-full mt-2" onClick={handleFinish}>
-                Go to Dashboard
-              </Button>
+              <Button className="w-full mt-2" onClick={handleFinish}>Go to Dashboard</Button>
             </div>
           </div>
         </div>
-      </>
-    );
-  }
+      )}
 
-  return (
-    <>
-      {/* Overlay with spotlight cutout */}
-      <svg
-        className="fixed inset-0 z-[9998]"
-        width={vw}
-        height={vh}
-        style={{ pointerEvents: 'none' }}
-      >
-        <defs>
-          <mask id="tour-mask">
-            <rect x="0" y="0" width={vw} height={vh} fill="white" />
-            {spotlight && (
-              <rect
-                x={spotlight.left}
-                y={spotlight.top}
-                width={spotlight.width}
-                height={spotlight.height}
-                rx={8}
-                ry={8}
-                fill="black"
-              />
-            )}
-          </mask>
-        </defs>
-        <rect
-          x="0" y="0" width={vw} height={vh}
-          fill="rgba(0,0,0,0.7)"
-          mask="url(#tour-mask)"
-          style={{ pointerEvents: 'auto' }}
-        />
-        {/* Subtle pulse ring around spotlight */}
-        {spotlight && (
-          <rect
-            x={spotlight.left - 2}
-            y={spotlight.top - 2}
-            width={spotlight.width + 4}
-            height={spotlight.height + 4}
-            rx={10}
-            ry={10}
-            fill="none"
-            stroke="hsl(var(--primary) / 0.35)"
-            strokeWidth="1.5"
-            style={{ pointerEvents: 'none' }}
-          >
-            <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="2" />
-          </rect>
-        )}
-      </svg>
+      {/* Waiting / loading state */}
+      {isWaiting && !showEndScreen && !showFallback && (
+        <div className="fixed z-[9999] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="rounded-lg border border-border bg-popover p-4 shadow-lg animate-in fade-in-0 duration-150"
+            onClick={e => e.stopPropagation()}>
+            <p className="text-sm text-muted-foreground">Loading step…</p>
+          </div>
+        </div>
+      )}
 
-      {/* Tooltip */}
-      {tooltipStyle && (
+      {/* Fallback: target not found after retries */}
+      {showFallback && !showEndScreen && (
+        <div className="fixed z-[9999] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="rounded-lg border border-border bg-popover p-5 shadow-lg max-w-xs space-y-3 animate-in fade-in-0 duration-150"
+            onClick={e => e.stopPropagation()}>
+            <p className="text-sm text-foreground font-medium">Couldn't find this step on the page.</p>
+            <p className="text-xs text-muted-foreground">The element may not be visible right now.</p>
+            <div className="flex gap-2 justify-end">
+              <Button size="sm" variant="outline" onClick={handleRetry} className="text-xs h-7 px-3">Retry</Button>
+              <Button size="sm" onClick={handleSkipStep} className="text-xs h-7 px-3">Skip step</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tooltip — only when showing */}
+      {isShowing && tooltipPos && !showEndScreen && (
         <div
           ref={tooltipRef}
           className="fixed z-[9999] animate-in fade-in-0 duration-150"
-          style={{
-            top: tooltipStyle.top,
-            left: tooltipStyle.left,
-            width: Math.min(TOOLTIP_MAX_W, vw - 24),
-          }}
-          onClick={e => e.stopPropagation()}
-        >
+          style={{ top: tooltipPos.top, left: tooltipPos.left, width: Math.min(TOOLTIP_MAX_W, vw - 24) }}
+          onClick={e => e.stopPropagation()}>
           <div className="relative rounded-lg border border-border bg-popover p-4 shadow-lg">
-            <Arrow side={tooltipStyle.arrowSide} offset={tooltipStyle.arrowOffset} />
+            <Arrow side={tooltipPos.arrowSide} offset={tooltipPos.arrowOffset} />
 
-            <h3 className="text-[15px] font-semibold text-foreground leading-snug">
-              {step.title}
-            </h3>
-            <p className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">
-              {step.body}
-            </p>
+            <h3 className="text-[15px] font-semibold text-foreground leading-snug">{step.title}</h3>
+            <p className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">{step.body}</p>
 
             <div className="flex items-center justify-between mt-4">
               <span className="text-[11px] text-muted-foreground">
-                {currentStep + 1} of {steps.length}
+                {currentIndex + 1} of {steps.length}
               </span>
               <div className="flex items-center gap-2">
-                {currentStep > 0 && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleBack}
-                    className="text-xs h-7 px-3"
-                  >
-                    Back
-                  </Button>
+                {currentIndex > 0 && (
+                  <Button size="sm" variant="ghost" onClick={handleBack} className="text-xs h-7 px-3">Back</Button>
                 )}
-                <Button
-                  size="sm"
-                  onClick={handleNext}
-                  className="text-xs h-7 px-4"
-                >
+                <Button size="sm" onClick={handleNext} className="text-xs h-7 px-4">
                   {isLast ? 'Finish' : 'Next'}
                 </Button>
               </div>
             </div>
 
             <div className="mt-2 text-right">
-              <button
-                onClick={() => setShowSkipConfirm(true)}
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              >
+              <button onClick={() => setShowSkipConfirm(true)}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
                 Skip tour
               </button>
             </div>
@@ -434,14 +456,12 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
         </div>
       )}
 
-      {/* Skip confirmation dialog */}
+      {/* Skip confirmation */}
       <AlertDialog open={showSkipConfirm} onOpenChange={setShowSkipConfirm}>
         <AlertDialogContent className="z-[10000]">
           <AlertDialogHeader>
             <AlertDialogTitle>Skip the tour?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You can restart it anytime from Settings → Getting Started.
-            </AlertDialogDescription>
+            <AlertDialogDescription>You can restart it anytime from Settings → Getting Started.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Continue tour</AlertDialogCancel>
