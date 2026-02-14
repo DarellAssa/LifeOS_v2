@@ -285,8 +285,14 @@ OUTPUT FORMAT: You MUST output ONLY a JSON object matching this exact schema:
   ],
   "overall_impact": { "creates": 0, "updates": 0, "deletes": 0 },
   "assumptions": ["assumption 1"],
-  "questions": []
+  "questions": [],
+  "schedule_operations": null
 }
+
+SCHEDULING:
+- For scheduling requests, use tools: parse_time_request, check_schedule_conflicts, schedule_preview, commit_schedule.
+- When using schedule tools, include a "schedule_operations" key in your plan with the schedule_preview output.
+- For non-scheduling requests, set schedule_operations to null.
 
 RULES:
 1. Output ONLY the JSON plan. No markdown, no explanation, no wrapping.
@@ -297,7 +303,41 @@ RULES:
 6. No deletes unless user explicitly asked for deletion.
 7. If updates > 3, set requires_confirmation=true on those steps.
 8. Max 6 steps per plan.
-9. Available tools: search_lifeos, create_task, update_task, schedule_task_focus_block, create_event, create_goal, triage_inbox, apply_template.`;
+9. Available tools: search_lifeos, create_task, update_task, schedule_task_focus_block, create_event, create_goal, triage_inbox, apply_template, parse_time_request, check_schedule_conflicts, schedule_preview, commit_schedule.
+10. For scheduling requests: always use parse_time_request first, then schedule_preview, then commit_schedule.`;
+
+// ── Time parser system prompt ──
+const TIME_PARSER_SYSTEM_PROMPT = `You convert natural language scheduling instructions into structured JSON.
+
+Output STRICT JSON matching this schema:
+{
+  "intent": "create|move|resize|cancel",
+  "kind": "event|focus|task_to_focus",
+  "title_hint": string|null,
+  "start_at": string|null,
+  "end_at": string|null,
+  "duration_minutes": number|null,
+  "recurrence": {
+    "rrule": string|null,
+    "count": number|null,
+    "until": string|null
+  } | null,
+  "needs_followup": boolean,
+  "followup_question": string|null,
+  "confidence": "low|med|high"
+}
+
+RULES:
+1. Use the user's timezone for all times. Output ISO 8601 strings in that timezone offset.
+2. "tomorrow afternoon" → default 14:00-17:00. Ask for duration if not specified.
+3. "next Tuesday morning" → 09:00-12:00. Ask for duration if not specified.
+4. "every weekday at 8" → recurrence with rrule "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", time 08:00. Ask for duration if missing.
+5. "move my 2pm focus block to 4pm" → intent "move", kind "focus". If multiple matches possible, set needs_followup=true.
+6. If start_at is provided but no end_at or duration_minutes, set needs_followup=true and ask for duration.
+7. If neither start_at nor clear time reference, set needs_followup=true.
+8. For "block X minutes for Y" → kind "focus", set duration_minutes.
+9. NEVER guess dates the user didn't specify. Set confidence accordingly.
+10. Output ONLY the JSON object.`;
 
 const TOOLS = [
   {
@@ -396,6 +436,14 @@ const TOOLS = [
           endDateTime: { type: "string", description: "ISO datetime" },
           category: { type: "string", enum: ["work", "personal", "study", "health", "custom"] },
           notes: { type: "string" },
+          recurring: {
+            type: "object",
+            description: "Recurrence config",
+            properties: {
+              type: { type: "string", enum: ["daily", "weekly", "monthly"] },
+              interval: { type: "number" },
+            },
+          },
         },
         required: ["title", "startDateTime", "endDateTime"],
       },
@@ -451,9 +499,101 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "parse_time_request",
+      description: "Parse a natural language scheduling instruction into structured time data.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "User scheduling instruction" },
+          timezone: { type: "string" },
+          week_start: { type: "string", enum: ["mon", "sun"] },
+          anchor_date_iso: { type: "string", description: "now() in user tz, ISO format" },
+        },
+        required: ["text", "timezone", "anchor_date_iso"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "check_schedule_conflicts",
+      description: "Check for scheduling conflicts in a given time range.",
+      parameters: {
+        type: "object",
+        properties: {
+          start_at: { type: "string", description: "ISO datetime" },
+          end_at: { type: "string", description: "ISO datetime" },
+          timezone: { type: "string" },
+          include: { type: "array", items: { type: "string", enum: ["calendar_events", "focus_blocks"] } },
+          exclude_ids: {
+            type: "object",
+            properties: {
+              event_id: { type: "string" },
+              focus_block_id: { type: "string" },
+            },
+          },
+        },
+        required: ["start_at", "end_at"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "schedule_preview",
+      description: "Preview schedule operations without writing. Returns what will be created/updated.",
+      parameters: {
+        type: "object",
+        properties: {
+          parsed: { type: "object", description: "Output of parse_time_request" },
+          target_entity: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["task", "event", "focus"] },
+              id: { type: "string" },
+            },
+          },
+        },
+        required: ["parsed"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "commit_schedule",
+      description: "Execute schedule operations (create/update events and focus blocks). REQUIRES prior preview.",
+      parameters: {
+        type: "object",
+        properties: {
+          operations: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                op: { type: "string", enum: ["create", "update"] },
+                kind: { type: "string", enum: ["event", "focus"] },
+                title: { type: "string" },
+                start_at: { type: "string" },
+                end_at: { type: "string" },
+                recurrence: { type: "object" },
+                target_id: { type: "string", description: "For updates, the entity ID" },
+              },
+              required: ["op", "kind", "title", "start_at", "end_at"],
+            },
+          },
+          confirm: { type: "boolean" },
+        },
+        required: ["operations", "confirm"],
+      },
+    },
+  },
 ];
 
-const RISKY_TOOLS = new Set(["triage_inbox", "apply_template"]);
+const RISKY_TOOLS = new Set(["triage_inbox", "apply_template", "commit_schedule"]);
 
 // ── Tool Execution Functions ──
 
@@ -570,7 +710,7 @@ async function executeScheduleFocusBlock(
 
 async function executeCreateEvent(
   supabase: ReturnType<typeof createClient>, userId: string,
-  args: { title: string; startDateTime: string; endDateTime: string; category?: string; notes?: string }
+  args: { title: string; startDateTime: string; endDateTime: string; category?: string; notes?: string; recurring?: { type: string; interval: number } }
 ): Promise<ToolExecResult> {
   if (!args.title) return { output: { error: "Title required" }, actionsTaken: [], dataUsed: [] };
   const now = new Date().toISOString();
@@ -578,6 +718,7 @@ async function executeCreateEvent(
     user_id: userId, title: args.title.slice(0, 500),
     start_date_time: args.startDateTime, end_date_time: args.endDateTime,
     category: args.category || "personal", notes: args.notes?.slice(0, 2000) || null,
+    recurring: args.recurring || null,
     created_at: now, updated_at: now,
   }).select("id").single();
   if (error) return { output: { error: error.message }, actionsTaken: [], dataUsed: [] };
@@ -745,6 +886,284 @@ async function executeApplyTemplate(
   };
 }
 
+// ── Scheduling Tool Implementations ──
+
+async function executeParseTimeRequest(
+  apiKey: string,
+  args: { text: string; timezone: string; week_start?: string; anchor_date_iso: string }
+): Promise<ToolExecResult> {
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: TIME_PARSER_SYSTEM_PROMPT },
+          { role: "user", content: `Timezone: ${args.timezone}\nWeek start: ${args.week_start || "mon"}\nCurrent date/time: ${args.anchor_date_iso}\n\nInstruction: ${args.text}` },
+        ],
+        max_tokens: 500, temperature: 0.1,
+      }),
+    });
+    if (!resp.ok) {
+      return { output: { error: "Time parsing AI unavailable", needs_followup: true, followup_question: "Could you specify the exact date and time?" }, actionsTaken: [], dataUsed: [] };
+    }
+    const data = await resp.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const match = content.match(/\{[\s\S]*\}/);
+    if (!match) {
+      return { output: { error: "Failed to parse time", needs_followup: true, followup_question: "Could you specify the exact date and time?" }, actionsTaken: [], dataUsed: [] };
+    }
+    const parsed = JSON.parse(match[0]);
+    // Validate required fields
+    if (!parsed.intent || !parsed.kind) {
+      return { output: { error: "Incomplete time parse", needs_followup: true, followup_question: "What would you like to schedule and when?" }, actionsTaken: [], dataUsed: [] };
+    }
+    return { output: parsed, actionsTaken: [], dataUsed: ["time_parser"] };
+  } catch (err: any) {
+    return { output: { error: err.message, needs_followup: true, followup_question: "Could you specify the exact date and time?" }, actionsTaken: [], dataUsed: [] };
+  }
+}
+
+async function executeCheckScheduleConflicts(
+  supabase: ReturnType<typeof createClient>, userId: string,
+  args: { start_at: string; end_at: string; timezone?: string; include?: string[]; exclude_ids?: { event_id?: string; focus_block_id?: string } }
+): Promise<ToolExecResult> {
+  const conflicts: any[] = [];
+  const include = args.include || ["calendar_events", "focus_blocks"];
+
+  if (include.includes("calendar_events")) {
+    const { data: events } = await supabase.from("calendar_events")
+      .select("id, title, start_date_time, end_date_time")
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .lt("start_date_time", args.end_at)
+      .gt("end_date_time", args.start_at)
+      .limit(20);
+    for (const e of (events || [])) {
+      if (args.exclude_ids?.event_id === e.id) continue;
+      conflicts.push({ kind: "event", id: e.id, title: e.title, start_at: e.start_date_time, end_at: e.end_date_time, route: "/calendar" });
+    }
+  }
+
+  if (include.includes("focus_blocks")) {
+    const { data: blocks } = await supabase.from("focus_blocks")
+      .select("id, title, start_date_time, end_date_time")
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .lt("start_date_time", args.end_at)
+      .gt("end_date_time", args.start_at)
+      .limit(20);
+    for (const b of (blocks || [])) {
+      if (args.exclude_ids?.focus_block_id === b.id) continue;
+      conflicts.push({ kind: "focus", id: b.id, title: b.title, start_at: b.start_date_time, end_at: b.end_date_time, route: "/calendar" });
+    }
+  }
+
+  return {
+    output: { conflicts, is_conflict_free: conflicts.length === 0 },
+    actionsTaken: [],
+    dataUsed: [`Checked ${include.join(", ")} for conflicts`],
+  };
+}
+
+async function executeProposTimeAlternatives(
+  supabase: ReturnType<typeof createClient>, userId: string,
+  args: { start_at: string; end_at: string; timezone?: string; window?: string; preferences?: { work_hours?: string[]; avoid_evenings?: boolean } }
+): Promise<ToolExecResult> {
+  const duration = new Date(args.end_at).getTime() - new Date(args.start_at).getTime();
+  const durationMs = Math.max(duration, 30 * 60 * 1000);
+  const startDate = new Date(args.start_at);
+  const windowDays = args.window === "next_7_days" ? 7 : 1;
+  const workStart = args.preferences?.work_hours?.[0] || "09:00";
+  const workEnd = args.preferences?.work_hours?.[1] || "18:00";
+  const [wsH, wsM] = workStart.split(":").map(Number);
+  const [weH, weM] = workEnd.split(":").map(Number);
+
+  const alternatives: { start_at: string; end_at: string; reason: string }[] = [];
+
+  for (let d = 0; d < windowDays && alternatives.length < 3; d++) {
+    const dayDate = new Date(startDate.getTime() + d * 86400000);
+    const dayStr = dayDate.toISOString().slice(0, 10);
+
+    // Try morning, midday, afternoon slots
+    const slots = [
+      { h: wsH, m: wsM, label: "morning" },
+      { h: 12, m: 0, label: "midday" },
+      { h: 14, m: 0, label: "afternoon" },
+      { h: 16, m: 0, label: "late afternoon" },
+    ];
+
+    for (const slot of slots) {
+      if (alternatives.length >= 3) break;
+      if (args.preferences?.avoid_evenings && slot.h >= 18) continue;
+
+      const slotStart = new Date(`${dayStr}T${String(slot.h).padStart(2, "0")}:${String(slot.m).padStart(2, "0")}:00`);
+      const slotEnd = new Date(slotStart.getTime() + durationMs);
+
+      // Skip if same as original
+      if (slotStart.toISOString() === args.start_at) continue;
+      // Skip if outside work hours
+      if (slotEnd.getHours() > weH || (slotEnd.getHours() === weH && slotEnd.getMinutes() > weM)) continue;
+
+      // Check conflicts for this slot
+      const { data: evConflicts } = await supabase.from("calendar_events")
+        .select("id")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .lt("start_date_time", slotEnd.toISOString())
+        .gt("end_date_time", slotStart.toISOString())
+        .limit(1);
+      const { data: fbConflicts } = await supabase.from("focus_blocks")
+        .select("id")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .lt("start_date_time", slotEnd.toISOString())
+        .gt("end_date_time", slotStart.toISOString())
+        .limit(1);
+
+      if ((!evConflicts || evConflicts.length === 0) && (!fbConflicts || fbConflicts.length === 0)) {
+        alternatives.push({
+          start_at: slotStart.toISOString(),
+          end_at: slotEnd.toISOString(),
+          reason: `${d === 0 ? "Today" : dayStr} ${slot.label} — no conflicts`,
+        });
+      }
+    }
+  }
+
+  return {
+    output: { alternatives },
+    actionsTaken: [],
+    dataUsed: ["schedule_alternatives"],
+  };
+}
+
+function executeSchedulePreview(
+  args: { parsed: any; target_entity?: { kind: string; id: string } }
+): ToolExecResult {
+  const parsed = args.parsed;
+  if (!parsed || parsed.error || parsed.needs_followup) {
+    return { output: { error: parsed?.error || "Time not parsed", needs_followup: true, followup_question: parsed?.followup_question }, actionsTaken: [], dataUsed: [] };
+  }
+
+  const operations: any[] = [];
+  const intent = parsed.intent || "create";
+  const kind = parsed.kind === "task_to_focus" ? "focus" : (parsed.kind || "focus");
+
+  if (intent === "create") {
+    operations.push({
+      op: "create",
+      kind,
+      title: parsed.title_hint || "Untitled",
+      start_at: parsed.start_at,
+      end_at: parsed.end_at || (parsed.start_at && parsed.duration_minutes
+        ? new Date(new Date(parsed.start_at).getTime() + parsed.duration_minutes * 60000).toISOString()
+        : null),
+      recurrence: parsed.recurrence || null,
+      route: "/calendar",
+      risk: "low",
+    });
+  } else if (intent === "move" && args.target_entity) {
+    operations.push({
+      op: "update",
+      kind: args.target_entity.kind === "task" ? "focus" : args.target_entity.kind,
+      title: parsed.title_hint || "Updated item",
+      start_at: parsed.start_at,
+      end_at: parsed.end_at || (parsed.start_at && parsed.duration_minutes
+        ? new Date(new Date(parsed.start_at).getTime() + parsed.duration_minutes * 60000).toISOString()
+        : null),
+      recurrence: parsed.recurrence || null,
+      route: "/calendar",
+      risk: "low",
+      target_id: args.target_entity.id,
+    });
+  }
+
+  const creates = operations.filter(o => o.op === "create").length;
+  const updates = operations.filter(o => o.op === "update").length;
+
+  return {
+    output: {
+      operations,
+      impact: { creates, updates, deletes: 0 },
+    },
+    actionsTaken: [],
+    dataUsed: ["schedule_preview"],
+  };
+}
+
+async function executeCommitSchedule(
+  supabase: ReturnType<typeof createClient>, userId: string,
+  args: { operations: any[]; confirm: boolean }
+): Promise<ToolExecResult> {
+  if (!args.confirm) return { output: { error: "Must confirm before committing" }, actionsTaken: [], dataUsed: [] };
+
+  const created: any[] = [];
+  const updated: any[] = [];
+  const errors: any[] = [];
+  const createdEntities: { type: string; id: string }[] = [];
+  const now = new Date().toISOString();
+
+  for (let i = 0; i < (args.operations || []).length; i++) {
+    const op = args.operations[i];
+    try {
+      if (op.op === "create") {
+        if (op.kind === "event") {
+          const { data, error } = await supabase.from("calendar_events").insert({
+            user_id: userId, title: op.title || "Untitled Event",
+            start_date_time: op.start_at, end_date_time: op.end_at,
+            category: "personal", recurring: op.recurrence || null,
+            created_at: now, updated_at: now,
+          }).select("id").single();
+          if (error) { errors.push({ opIndex: i, message: error.message }); continue; }
+          created.push({ kind: "event", id: data.id, title: op.title, route: "/calendar" });
+          createdEntities.push({ type: "event", id: data.id });
+        } else if (op.kind === "focus") {
+          const { data, error } = await supabase.from("focus_blocks").insert({
+            user_id: userId, title: op.title || "Focus Block",
+            start_date_time: op.start_at, end_date_time: op.end_at,
+            status: "planned", linked_task_id: op.linked_task_id || null,
+            created_at: now, updated_at: now,
+          }).select("id").single();
+          if (error) { errors.push({ opIndex: i, message: error.message }); continue; }
+          created.push({ kind: "focus", id: data.id, title: op.title, route: "/calendar" });
+          createdEntities.push({ type: "focus_block", id: data.id });
+        }
+      } else if (op.op === "update" && op.target_id) {
+        if (op.kind === "event") {
+          const { error } = await supabase.from("calendar_events").update({
+            start_date_time: op.start_at, end_date_time: op.end_at,
+            updated_at: now,
+          }).eq("id", op.target_id).eq("user_id", userId);
+          if (error) { errors.push({ opIndex: i, message: error.message }); continue; }
+          updated.push({ kind: "event", id: op.target_id, title: op.title, route: "/calendar" });
+        } else if (op.kind === "focus") {
+          const { error } = await supabase.from("focus_blocks").update({
+            start_date_time: op.start_at, end_date_time: op.end_at,
+            updated_at: now,
+          }).eq("id", op.target_id).eq("user_id", userId);
+          if (error) { errors.push({ opIndex: i, message: error.message }); continue; }
+          updated.push({ kind: "focus", id: op.target_id, title: op.title, route: "/calendar" });
+        }
+      }
+    } catch (err: any) {
+      errors.push({ opIndex: i, message: err.message });
+    }
+  }
+
+  const actionsTaken: string[] = [];
+  if (created.length > 0) actionsTaken.push(`Created ${created.length} schedule item(s)`);
+  if (updated.length > 0) actionsTaken.push(`Updated ${updated.length} schedule item(s)`);
+
+  return {
+    output: { created, updated, errors },
+    actionsTaken,
+    dataUsed: [],
+    createdEntities,
+  };
+}
+
 // Tool dispatcher
 async function executeTool(
   supabase: ReturnType<typeof createClient>, userId: string, apiKey: string,
@@ -759,6 +1178,11 @@ async function executeTool(
     case "create_goal": return await executeCreateGoal(supabase, userId, args as any);
     case "triage_inbox": return await executeTriageInbox(supabase, userId, args as any);
     case "apply_template": return await executeApplyTemplate(supabase, userId, args as any);
+    case "parse_time_request": return await executeParseTimeRequest(apiKey, args as any);
+    case "check_schedule_conflicts": return await executeCheckScheduleConflicts(supabase, userId, args as any);
+    case "propose_time_alternatives": return await executeProposTimeAlternatives(supabase, userId, args as any);
+    case "schedule_preview": return executeSchedulePreview(args as any);
+    case "commit_schedule": return await executeCommitSchedule(supabase, userId, args as any);
     default: return { output: { error: `Unknown tool: ${toolName}` }, actionsTaken: [], dataUsed: [] };
   }
 }
@@ -810,6 +1234,11 @@ function describeAction(name: string, args: Record<string, unknown>): string {
     case "create_event": return `Create event "${args.title}"`;
     case "create_goal": return `Create goal "${args.title}"`;
     case "schedule_task_focus_block": return `Schedule focus block for task ${args.taskId}`;
+    case "parse_time_request": return `Parse scheduling request: "${(args.text as string || "").slice(0, 50)}"`;
+    case "check_schedule_conflicts": return `Check conflicts ${args.start_at} to ${args.end_at}`;
+    case "propose_time_alternatives": return `Find alternative time slots`;
+    case "schedule_preview": return `Preview schedule changes`;
+    case "commit_schedule": return `Commit ${((args.operations as any[]) || []).length} schedule operation(s)`;
     default: return `${name}(${JSON.stringify(args).slice(0, 80)})`;
   }
 }
@@ -830,6 +1259,7 @@ interface Plan {
   overall_impact: { creates: number; updates: number; deletes: number };
   assumptions: string[];
   questions: string[];
+  schedule_operations?: any[] | null;
 }
 
 interface ToolRun {
@@ -841,7 +1271,12 @@ interface ToolRun {
   error?: string;
 }
 
-const VALID_TOOLS = new Set(["search_lifeos", "create_task", "update_task", "schedule_task_focus_block", "create_event", "create_goal", "triage_inbox", "apply_template"]);
+const VALID_TOOLS = new Set([
+  "search_lifeos", "create_task", "update_task", "schedule_task_focus_block",
+  "create_event", "create_goal", "triage_inbox", "apply_template",
+  "parse_time_request", "check_schedule_conflicts", "propose_time_alternatives",
+  "schedule_preview", "commit_schedule",
+]);
 
 function validatePlan(raw: any): { valid: boolean; plan?: Plan; error?: string } {
   if (!raw || typeof raw !== "object") return { valid: false, error: "Plan must be a JSON object" };
@@ -872,6 +1307,7 @@ function validatePlan(raw: any): { valid: boolean; plan?: Plan; error?: string }
     overall_impact: overall,
     assumptions: Array.isArray(raw.assumptions) ? raw.assumptions : [],
     questions: Array.isArray(raw.questions) ? raw.questions : [],
+    schedule_operations: raw.schedule_operations || null,
   };
 
   return { valid: true, plan };
@@ -955,7 +1391,6 @@ serve(async (req) => {
   // Parse URL path for sub-routes
   const url = new URL(req.url);
   const pathParts = url.pathname.split("/").filter(Boolean);
-  // pathParts = ["copilot"] or ["copilot","approve"] or ["copilot","cancel"]
   const subRoute = pathParts.length > 1 ? pathParts[pathParts.length - 1] : null;
 
   let stage = "init";
@@ -1029,7 +1464,6 @@ serve(async (req) => {
             error: err.message,
           });
           await logAudit(supabase, userId, threadId, step.tool, step.args, "error", err.message);
-          // Stop on error
           break;
         }
       }
@@ -1064,7 +1498,7 @@ serve(async (req) => {
     // MAIN ROUTE: /copilot (chat or plan_do)
     // ════════════════════════════════════════
     const { message, threadId, clientContext, confirmedActionId, confirmedToolCalls, mode } = body;
-    const copilotMode = mode || "chat"; // "chat" or "plan_do"
+    const copilotMode = mode || "chat";
 
     // ── Resolve or create thread ──
     stage = "resolve_thread";
@@ -1138,9 +1572,66 @@ serve(async (req) => {
         }), { headers: jsonHeaders });
       }
 
+      // For scheduling intents, run time parsing inline first
+      let scheduleContext = "";
+      if (intent.goal === "schedule" && message) {
+        const tz = clientContext?.timezone || "UTC";
+        const parseResult = await executeParseTimeRequest(LOVABLE_API_KEY, {
+          text: message,
+          timezone: tz,
+          week_start: clientContext?.weekStart || "mon",
+          anchor_date_iso: new Date().toISOString(),
+        });
+
+        if (parseResult.output && !parseResult.output.error) {
+          const parsedTime = parseResult.output as any;
+          // Check conflicts if we have times
+          let conflictsData: any = null;
+          if (parsedTime.start_at && parsedTime.end_at) {
+            const conflictResult = await executeCheckScheduleConflicts(supabase, userId, {
+              start_at: parsedTime.start_at,
+              end_at: parsedTime.end_at || new Date(new Date(parsedTime.start_at).getTime() + (parsedTime.duration_minutes || 60) * 60000).toISOString(),
+            });
+            conflictsData = conflictResult.output;
+          } else if (parsedTime.start_at && parsedTime.duration_minutes) {
+            const endAt = new Date(new Date(parsedTime.start_at).getTime() + parsedTime.duration_minutes * 60000).toISOString();
+            const conflictResult = await executeCheckScheduleConflicts(supabase, userId, {
+              start_at: parsedTime.start_at,
+              end_at: endAt,
+            });
+            conflictsData = conflictResult.output;
+          }
+
+          // Get alternatives if conflicts
+          let alternatives: any = null;
+          if (conflictsData && !conflictsData.is_conflict_free && parsedTime.start_at) {
+            const endAt = parsedTime.end_at || new Date(new Date(parsedTime.start_at).getTime() + (parsedTime.duration_minutes || 60) * 60000).toISOString();
+            const altResult = await executeProposTimeAlternatives(supabase, userId, {
+              start_at: parsedTime.start_at,
+              end_at: endAt,
+              window: "same_day",
+            });
+            alternatives = altResult.output;
+          }
+
+          scheduleContext = `\n\n## Parsed Schedule Request\n${JSON.stringify({
+            parsed_time: parsedTime,
+            conflicts: conflictsData,
+            alternatives: alternatives,
+          })}`;
+        } else if (parseResult.output?.needs_followup) {
+          await persistMessage(supabase, currentThreadId!, userId, "assistant", parseResult.output.followup_question as string);
+          return new Response(JSON.stringify({
+            type: "needs_followup",
+            question: parseResult.output.followup_question,
+            threadId: currentThreadId,
+          }), { headers: jsonHeaders });
+        }
+      }
+
       // Build planning messages
       const planMessages: any[] = [
-        { role: "system", content: `${PLANNING_SYSTEM_PROMPT}\n\n## Retrieved Context\n${contextJson}` },
+        { role: "system", content: `${PLANNING_SYSTEM_PROMPT}\n\n## Retrieved Context\n${contextJson}${scheduleContext}` },
       ];
       for (const m of (dbMessages || [])) {
         if (m.role === "tool") continue;
@@ -1153,7 +1644,6 @@ serve(async (req) => {
       // Try to parse as JSON
       const jsonMatch = planContent.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        // Model didn't return JSON, treat as chat fallback
         await persistMessage(supabase, currentThreadId!, userId, "assistant", planContent);
         return new Response(JSON.stringify({
           type: "final",
