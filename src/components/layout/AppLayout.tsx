@@ -44,6 +44,7 @@ export function AppLayout() {
         title: 'This is Today',
         body: 'LifeOS surfaces what matters now: what\'s due, what\'s behind, and your next action.',
         placement: 'bottom',
+        route: '/',
       },
       {
         id: 'quick-capture',
@@ -51,13 +52,14 @@ export function AppLayout() {
         title: 'Capture anything in seconds',
         body: 'Drop thoughts, links, and to-dos into Inbox. Organize when you have time — nothing gets lost.',
         placement: 'bottom',
+        route: '/',
       },
       {
         id: 'tasks',
-        targetSelector: '[data-tour="nav-tasks"]',
-        title: 'Turn intent into action',
+        targetSelector: '[data-tour="add-task"]',
+        title: 'Create your first task',
         body: 'Tasks are your execution layer. Keep them small and specific.',
-        placement: 'right',
+        placement: 'bottom',
         route: '/tasks',
         requiredModule: 'tasks',
       },
@@ -70,8 +72,6 @@ export function AppLayout() {
         title: 'Schedule focus, not just tasks',
         body: 'Time-block deep work so plans actually happen. Start with one 30–60 min block.',
         placement: 'right',
-        route: '/calendar',
-        requiredModule: 'calendar',
       });
     }
 
@@ -82,8 +82,6 @@ export function AppLayout() {
         title: 'Goals keep you pointed forward',
         body: 'Link tasks to goals and see what\'s on track — without overthinking it.',
         placement: 'right',
-        route: '/goals',
-        requiredModule: 'goals',
       });
     }
 
@@ -93,7 +91,6 @@ export function AppLayout() {
       title: 'You control the system',
       body: 'Enable or hide modules anytime. Nothing is permanent — LifeOS adapts to you.',
       placement: 'right',
-      route: '/settings',
     });
 
     return steps;

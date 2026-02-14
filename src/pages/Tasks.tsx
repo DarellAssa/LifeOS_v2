@@ -249,12 +249,12 @@ export default function Tasks() {
 
   if (data.tasks.length === 0) {
     return (
-      <div className="max-w-6xl mx-auto flex flex-col items-center justify-center py-24 space-y-4">
+    <div className="max-w-6xl mx-auto flex flex-col items-center justify-center py-24 space-y-4" data-tour="tasks-header">
         <div className="rounded-full bg-muted p-6"><Plus className="h-8 w-8 text-muted-foreground" /></div>
         <h2 className="text-xl font-semibold">No tasks yet</h2>
         <p className="text-muted-foreground text-sm">Create your first task to get started.</p>
         <Dialog open={dialogOpen} onOpenChange={o => { setDialogOpen(o); if (!o) setEditingTask(undefined); }}>
-          <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" /> Add your first task</Button></DialogTrigger>
+          <DialogTrigger asChild><Button data-tour="add-task"><Plus className="h-4 w-4 mr-1" /> Add your first task</Button></DialogTrigger>
           <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>New Task</DialogTitle></DialogHeader>
             <TaskForm onSave={handleSave} onClose={() => { setDialogOpen(false); setEditingTask(undefined); }} goals={activeGoals.map(g => ({ id: g.id, title: g.title }))} />
           </DialogContent>
@@ -265,10 +265,10 @@ export default function Tasks() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" data-tour="tasks-header">
         <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
         <Dialog open={dialogOpen} onOpenChange={o => { setDialogOpen(o); if (!o) setEditingTask(undefined); }}>
-          <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add Task</Button></DialogTrigger>
+          <DialogTrigger asChild><Button size="sm" data-tour="add-task"><Plus className="h-4 w-4 mr-1" /> Add Task</Button></DialogTrigger>
           <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>{editingTask ? 'Edit Task' : 'New Task'}</DialogTitle></DialogHeader>
             <TaskForm initial={editingTask} onSave={handleSave} onClose={() => { setDialogOpen(false); setEditingTask(undefined); }} goals={activeGoals.map(g => ({ id: g.id, title: g.title }))} />
           </DialogContent>
@@ -277,7 +277,7 @@ export default function Tasks() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <TabsList>
+          <TabsList data-tour="tasks-tabs">
             <TabsTrigger value="list">List</TabsTrigger>
             <TabsTrigger value="kanban">Kanban</TabsTrigger>
             <TabsTrigger value="overdue" className="relative">
