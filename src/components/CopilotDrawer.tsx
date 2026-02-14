@@ -1,13 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle, Sparkles } from 'lucide-react';
+import { Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle, Sparkles, ShieldCheck, X } from 'lucide-react';
 import { useAppContext } from '@/store/AppContext';
-import { buildMemoryPack, CopilotMessage, streamCopilotMessage, executeToolCall, ToolCall } from '@/lib/copilot';
+import { buildMemoryPack, CopilotMessage, PendingConfirmation, sendCopilotMessage, confirmCopilotAction } from '@/lib/copilot';
 import ReactMarkdown from 'react-markdown';
 
 interface CopilotDrawerProps {
@@ -79,92 +78,127 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
     abortRef.current = abortController;
 
     const memoryPack = buildMemoryPack(ctx.data);
-    let allActionsTaken: string[] = [];
-    let allDataUsed: string[] = [];
+    const apiMessages = newMsgs.map(m => ({ role: m.role, content: m.content }));
 
-    // Build API messages (role + content only for context)
-    const apiMessages: { role: string; content: string }[] = newMsgs.map(m => ({ role: m.role, content: m.content }));
+    let currentActionsTaken: string[] = [];
+    let currentDataUsed: string[] = [];
 
-    // Tool calling loop
-    let currentMessages: { role: string; content: string; [key: string]: any }[] = apiMessages;
-    let toolResults: any[] | undefined;
-    let maxRounds = 5;
-    let assistantContent = '';
-
-    const runRound = async () => {
-      assistantContent = '';
-
-      await streamCopilotMessage({
-        messages: currentMessages,
-        memoryPack,
-        toolResults,
-        onDelta: (chunk) => {
-          assistantContent += chunk;
-          setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (last?.role === 'assistant') {
-              return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantContent } : m);
-            }
-            return [...prev, {
-              role: 'assistant', content: assistantContent,
-              actionsTaken: allActionsTaken, dataUsed: allDataUsed,
-              timestamp: new Date().toISOString()
-            }];
-          });
-        },
-        onToolCalls: async (calls: ToolCall[]) => {
-          // Execute tool calls client-side
-          const results = calls.map(tc => {
-            const result = executeToolCall(tc, ctx.data, ctx);
-            allActionsTaken.push(...result.actionsTaken);
-            allDataUsed.push(...result.dataUsed);
-            return { tool_call_id: tc.id, output: result.output };
-          });
-
-          // Add assistant message with tool_calls to conversation
-          currentMessages = [
-            ...currentMessages,
-            { role: 'assistant', content: assistantContent || '', tool_calls: calls },
-            ...results.map(r => ({ role: 'tool' as const, content: JSON.stringify(r.output), tool_call_id: r.tool_call_id }))
-          ];
-          toolResults = results;
-
-          maxRounds--;
-          if (maxRounds > 0 && !abortController.signal.aborted) {
-            await runRound();
-          } else {
-            finishStreaming();
+    await sendCopilotMessage({
+      messages: apiMessages,
+      memoryPack,
+      onContent: (content) => {
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === 'assistant') {
+            return prev.map((m, i) => i === prev.length - 1 ? { ...m, content } : m);
           }
-        },
-        onDone: () => {
-          finishStreaming();
-        },
-        onError: (err) => {
-          setError(err);
-          setIsStreaming(false);
-        },
-        abortSignal: abortController.signal,
-      });
-    };
-
-    const finishStreaming = () => {
-      setIsStreaming(false);
-      abortRef.current = null;
-
-      setMessages(prev => {
-        const updated = prev.map((m, i) => {
-          if (i === prev.length - 1 && m.role === 'assistant') {
-            return { ...m, actionsTaken: allActionsTaken.length > 0 ? allActionsTaken : undefined, dataUsed: allDataUsed.length > 0 ? allDataUsed : undefined };
-          }
-          return m;
+          return [...prev, {
+            role: 'assistant', content,
+            actionsTaken: currentActionsTaken.length > 0 ? currentActionsTaken : undefined,
+            dataUsed: currentDataUsed.length > 0 ? currentDataUsed : undefined,
+            timestamp: new Date().toISOString(),
+          }];
         });
-        saveHistory(updated);
-        return updated;
-      });
-    };
-
-    await runRound();
+      },
+      onConfirmationRequired: (confirmation, partialContent) => {
+        const confirmMsg: CopilotMessage = {
+          role: 'assistant',
+          content: partialContent || 'I need your approval before proceeding with the following actions:',
+          pendingConfirmation: confirmation,
+          actionsTaken: currentActionsTaken.length > 0 ? currentActionsTaken : undefined,
+          dataUsed: currentDataUsed.length > 0 ? currentDataUsed : undefined,
+          timestamp: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, confirmMsg]);
+        setIsStreaming(false);
+        abortRef.current = null;
+        setMessages(prev => { saveHistory(prev); return prev; });
+      },
+      onMetadata: (actionsTaken, dataUsed) => {
+        currentActionsTaken = actionsTaken;
+        currentDataUsed = dataUsed;
+      },
+      onDone: () => {
+        setIsStreaming(false);
+        abortRef.current = null;
+        setMessages(prev => {
+          const updated = prev.map((m, i) => {
+            if (i === prev.length - 1 && m.role === 'assistant') {
+              return {
+                ...m,
+                actionsTaken: currentActionsTaken.length > 0 ? currentActionsTaken : undefined,
+                dataUsed: currentDataUsed.length > 0 ? currentDataUsed : undefined,
+              };
+            }
+            return m;
+          });
+          saveHistory(updated);
+          return updated;
+        });
+      },
+      onError: (err) => {
+        setError(err);
+        setIsStreaming(false);
+      },
+      abortSignal: abortController.signal,
+    });
   }, [messages, isStreaming, ctx]);
+
+  const handleConfirm = useCallback(async (msgIndex: number) => {
+    const msg = messages[msgIndex];
+    if (!msg.pendingConfirmation) return;
+
+    setIsStreaming(true);
+    setError(null);
+
+    await confirmCopilotAction({
+      actionId: msg.pendingConfirmation.actionId,
+      toolCalls: msg.pendingConfirmation.actions,
+      onDone: (actionsTaken) => {
+        setMessages(prev => {
+          const updated = [...prev];
+          // Mark confirmation as done
+          updated[msgIndex] = {
+            ...updated[msgIndex],
+            pendingConfirmation: { ...updated[msgIndex].pendingConfirmation!, confirmed: true },
+          };
+          // Add confirmation result message
+          updated.push({
+            role: 'assistant',
+            content: `✅ Done! ${actionsTaken.join('. ')}`,
+            actionsTaken,
+            timestamp: new Date().toISOString(),
+          });
+          saveHistory(updated);
+          return updated;
+        });
+        setIsStreaming(false);
+        // Refresh data to reflect server changes
+        ctx.refreshData?.();
+      },
+      onError: (err) => {
+        setError(err);
+        setIsStreaming(false);
+      },
+    });
+  }, [messages, ctx]);
+
+  const handleReject = useCallback((msgIndex: number) => {
+    setMessages(prev => {
+      const updated = [...prev];
+      updated[msgIndex] = {
+        ...updated[msgIndex],
+        pendingConfirmation: { ...updated[msgIndex].pendingConfirmation!, confirmed: false },
+      };
+      updated.push({
+        role: 'assistant',
+        content: 'Understood — action cancelled. Let me know if you need anything else.',
+        timestamp: new Date().toISOString(),
+      });
+      saveHistory(updated);
+      return updated;
+    });
+  }, []);
 
   const stopGenerating = () => {
     abortRef.current?.abort();
@@ -236,6 +270,41 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
                       <p>{msg.content}</p>
                     )}
                   </div>
+
+                  {/* Confirmation UI */}
+                  {msg.pendingConfirmation && msg.pendingConfirmation.confirmed === undefined && (
+                    <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-accent-foreground">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Confirmation required
+                      </div>
+                      <div className="space-y-1">
+                        {msg.pendingConfirmation.actions.map((action, j) => (
+                          <p key={j} className="text-xs text-muted-foreground">• {action.description}</p>
+                        ))}
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <Button size="sm" className="h-7 text-xs" onClick={() => handleConfirm(i)} disabled={isStreaming}>
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleReject(i)} disabled={isStreaming}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {msg.pendingConfirmation?.confirmed === true && (
+                    <div className="flex items-center gap-1 text-[10px] text-primary">
+                      <ShieldCheck className="h-3 w-3" /> Approved & executed
+                    </div>
+                  )}
+
+                  {msg.pendingConfirmation?.confirmed === false && (
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <X className="h-3 w-3" /> Cancelled by user
+                    </div>
+                  )}
 
                   {/* Actions taken */}
                   {msg.actionsTaken && msg.actionsTaken.length > 0 && (
@@ -320,7 +389,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
             )}
           </div>
           <p className="text-[9px] text-muted-foreground mt-1.5 text-center">
-            Copilot uses your LifeOS data to answer. Actions modify your data directly.
+            Tools execute server-side with your session. Destructive actions require approval.
           </p>
         </div>
       </SheetContent>
