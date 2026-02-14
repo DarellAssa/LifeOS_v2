@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Download, Upload, Trash2, CalendarDays, ExternalLink, Bell, ChevronDown, RotateCcw, Eye, Sparkles, Search, Loader2 } from 'lucide-react';
+import { Download, Upload, Trash2, CalendarDays, ExternalLink, Bell, ChevronDown, RotateCcw, Eye, Sparkles, Search, Loader2, Settings2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { NotificationType } from '@/types';
 import { resetTourForUser, isTourDebugEnabled, setTourDebugEnabled } from '@/components/GuidedTour';
@@ -18,6 +18,7 @@ import { dbDeleteDemoData } from '@/lib/db';
 import { useNavigate } from 'react-router-dom';
 import TrashSection from '@/components/TrashSection';
 import { supabase } from '@/integrations/supabase/client';
+import PreferencesPanel from '@/components/PreferencesPanel';
 
 const NOTIF_TYPE_LABELS: Record<NotificationType, string> = {
   task_overdue: 'Overdue tasks',
@@ -166,6 +167,9 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="modules">Modules</TabsTrigger>
+          <TabsTrigger value="preferences" className="flex items-center gap-1">
+            <Settings2 className="h-3 w-3" /> Preferences
+          </TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
           <TabsTrigger value="trash" className="flex items-center gap-1">
@@ -284,6 +288,10 @@ export default function SettingsPage() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
+        </TabsContent>
+
+        <TabsContent value="preferences" className="mt-4">
+          <PreferencesPanel />
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-4 mt-4">

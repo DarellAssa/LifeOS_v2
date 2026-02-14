@@ -1872,6 +1872,21 @@ serve(async (req) => {
       await persistMessage(supabase, currentThreadId!, userId, "user", message);
     }
 
+    // ── Fetch user preferences ──
+    stage = "load_preferences";
+    let userPrefs: any = {};
+    try {
+      const { data: profileData } = await supabase.from("profiles")
+        .select("preferences, timezone, week_start")
+        .eq("id", userId)
+        .single();
+      if (profileData?.preferences && typeof profileData.preferences === "object") {
+        userPrefs = profileData.preferences;
+      }
+    } catch { /* use defaults */ }
+    const schedulePrefs = userPrefs.schedule || {};
+    const triagePrefs = userPrefs.triage || {};
+
     // ── Load last 20 messages from thread ──
     stage = "load_messages";
     const { data: dbMessages } = await supabase.from("copilot_messages")
@@ -1938,6 +1953,10 @@ serve(async (req) => {
               start_at: parsedTime.start_at,
               end_at: endAt,
               window: "same_day",
+              preferences: {
+                work_hours: schedulePrefs.work_hours ? [schedulePrefs.work_hours.start || "09:00", schedulePrefs.work_hours.end || "18:00"] : undefined,
+                avoid_evenings: schedulePrefs.avoid_evenings !== undefined ? schedulePrefs.avoid_evenings : true,
+              },
             });
             alternatives = altResult.output;
           }
@@ -1963,8 +1982,11 @@ serve(async (req) => {
       if (intent.goal === "triage") {
         const tz = clientContext?.timezone || "UTC";
         const triageResult = await executeProposInboxTriage(supabase, userId, LOVABLE_API_KEY, {
-          limit: 20, scope: "unprocessed",
-          preferences: { timezone: tz },
+          limit: triagePrefs.default_batch_size || 20, scope: "unprocessed",
+          preferences: {
+            timezone: tz,
+            work_hours: schedulePrefs.work_hours ? [schedulePrefs.work_hours.start, schedulePrefs.work_hours.end] : undefined,
+          },
         });
 
         if (triageResult.output && !triageResult.output.error && (triageResult.output as any).items?.length > 0) {

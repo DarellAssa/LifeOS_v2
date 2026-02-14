@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { mergePreferences } from '@/types/preferences';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -69,6 +71,8 @@ interface DailyBriefingCardProps {
 }
 
 export function DailyBriefingCard({ onOpenCopilot }: DailyBriefingCardProps) {
+  const { profile } = useAuth();
+  const userPrefs = mergePreferences(profile?.preferences);
   const [briefing, setBriefing] = useState<BriefingContent | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -260,7 +264,7 @@ export function DailyBriefingCard({ onOpenCopilot }: DailyBriefingCardProps) {
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Next Actions</p>
                 <div className="space-y-1.5">
-                  {briefing.next_actions.slice(0, 6).map((action, i) => (
+                  {briefing.next_actions.slice(0, userPrefs.briefing.nba_count).map((action, i) => (
                     <div key={i} className="flex items-center gap-2 rounded border border-border p-2">
                       <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${severityDot(action.risk)}`} />
                       <div className="flex-1 min-w-0">

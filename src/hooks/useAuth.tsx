@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
+import { mergePreferences } from '@/types/preferences';
 
 export interface UserProfile {
   id: string;
@@ -74,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         focus_areas: (data.focus_areas as string[]) || [],
         operating_style: (data.operating_style as string) || 'flexible',
         modules: (data.modules as Record<string, boolean>) || DEFAULT_MODULES,
-        preferences: (data.preferences as Record<string, any>) || {},
+        preferences: mergePreferences(data.preferences as Record<string, any>),
         demo_mode: data.demo_mode || false,
       });
     }

@@ -16,6 +16,7 @@ import { format, addDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { GoalDisplayStatus } from '@/types';
 import { DailyBriefingCard } from '@/components/DailyBriefingCard';
+import { mergePreferences } from '@/types/preferences';
 
 const statusColors: Record<GoalDisplayStatus, string> = {
   'On track': 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
@@ -254,7 +255,9 @@ export default function Dashboard() {
         <>
 
       {/* AI Daily Briefing */}
-      <DailyBriefingCard onOpenCopilot={handleOpenCopilot} />
+      {mergePreferences(profile?.preferences).briefing.show_on_dashboard && (
+        <DailyBriefingCard onOpenCopilot={handleOpenCopilot} />
+      )}
 
       {/* Daily Digest Banner */}
       {dailyDigest && (
