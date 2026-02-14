@@ -261,6 +261,36 @@ export type Database = {
           },
         ]
       }
+      daily_briefings: {
+        Row: {
+          briefing_date: string
+          content: Json
+          created_at: string
+          id: string
+          model: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          briefing_date: string
+          content: Json
+          created_at?: string
+          id?: string
+          model?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          briefing_date?: string
+          content?: Json
+          created_at?: string
+          id?: string
+          model?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       daily_checkins: {
         Row: {
           blockers: string | null
@@ -574,6 +604,30 @@ export type Database = {
           id?: string
           is_demo?: boolean | null
           score?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      next_best_actions: {
+        Row: {
+          action_date: string
+          actions: Json
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          action_date: string
+          actions: Json
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          action_date?: string
+          actions?: Json
+          created_at?: string
+          id?: string
           user_id?: string
         }
         Relationships: []
