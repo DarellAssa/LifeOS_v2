@@ -173,6 +173,9 @@ function checkStepReady(step: TourStep, currentRoute: string): StepReadiness {
 
 /* ─── Element readiness (simple) ─── */
 
+const MIN_TARGET_WIDTH = 160;
+const MIN_TARGET_HEIGHT = 40;
+
 function isElementReady(selector: string): HTMLElement | null {
   const el = document.querySelector<HTMLElement>(selector);
   if (!el) return null;
@@ -183,6 +186,11 @@ function isElementReady(selector: string): HTMLElement | null {
   return el;
 }
 
+function isElementMeaningfulSize(el: HTMLElement): boolean {
+  const rect = el.getBoundingClientRect();
+  return rect.width >= MIN_TARGET_WIDTH && rect.height >= MIN_TARGET_HEIGHT;
+}
+
 /* ─── Geometry ─── */
 
 interface Rect { top: number; left: number; width: number; height: number; }
@@ -190,7 +198,7 @@ type Placement = 'top' | 'bottom' | 'left' | 'right';
 
 const TOOLTIP_MAX_W = 360;
 const GAP = 14;
-const SPOT_PAD = 6;
+const SPOT_PAD = 16;
 
 function resolvePlacement(rect: Rect, preferred: Placement, tw: number, th: number): Placement {
   const vw = window.innerWidth;
@@ -423,15 +431,28 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
       return;
     }
 
-    // Check element readiness with fallback selectors
+    // Check element readiness with fallback selectors + min size check
     const allSelectors = [step.targetSelector, ...(step.targetSelectorFallbacks ?? [])];
     let el: HTMLElement | null = null;
     let matchedSelector = step.targetSelector;
+    // First pass: find a ready element that is also meaningfully sized
     for (const sel of allSelectors) {
-      el = isElementReady(sel);
-      if (el) {
+      const candidate = isElementReady(sel);
+      if (candidate && isElementMeaningfulSize(candidate)) {
+        el = candidate;
         matchedSelector = sel;
         break;
+      }
+    }
+    // Second pass: if no meaningfully-sized element, accept any ready element
+    if (!el) {
+      for (const sel of allSelectors) {
+        const candidate = isElementReady(sel);
+        if (candidate) {
+          el = candidate;
+          matchedSelector = sel;
+          break;
+        }
       }
     }
 
@@ -461,7 +482,7 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
     setShowFallback(false);
     setFallbackReadiness(null);
     logTourEvent('TARGET_CHECK', currentIndex, location.pathname, matchedSelector, `found via ${matchedSelector}`);
-    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     requestAnimationFrame(() => {
       const r = el.getBoundingClientRect();
@@ -628,24 +649,57 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
           <mask id="tour-mask">
             <rect x="0" y="0" width={vw} height={vh} fill="white" />
             {isShowing && spotlight && (
-              <rect x={spotlight.left} y={spotlight.top} width={spotlight.width} height={spotlight.height} rx={8} ry={8} fill="black" />
+              <rect x={spotlight.left} y={spotlight.top} width={spotlight.width} height={spotlight.height} rx={10} ry={10} fill="black" />
             )}
           </mask>
+          {isShowing && spotlight && (
+            <filter id="tour-glow">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          )}
         </defs>
         <rect x="0" y="0" width={vw} height={vh}
-          fill="rgba(0,0,0,0.7)" mask="url(#tour-mask)"
+          fill="rgba(0,0,0,0.65)" mask="url(#tour-mask)"
           style={{ pointerEvents: 'auto' }} />
         {isShowing && spotlight && (
-          <rect
-            x={spotlight.left - 2} y={spotlight.top - 2}
-            width={spotlight.width + 4} height={spotlight.height + 4}
-            rx={10} ry={10} fill="none"
-            stroke="hsl(var(--primary) / 0.35)" strokeWidth="1.5"
-            style={{ pointerEvents: 'none' }}>
-            <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="2" />
-          </rect>
+          <>
+            {/* Outer glow */}
+            <rect
+              x={spotlight.left - 4} y={spotlight.top - 4}
+              width={spotlight.width + 8} height={spotlight.height + 8}
+              rx={12} ry={12} fill="none"
+              stroke="hsl(var(--primary) / 0.25)" strokeWidth="3"
+              filter="url(#tour-glow)"
+              style={{ pointerEvents: 'none' }}
+            />
+            {/* Inner border */}
+            <rect
+              x={spotlight.left - 1} y={spotlight.top - 1}
+              width={spotlight.width + 2} height={spotlight.height + 2}
+              rx={11} ry={11} fill="none"
+              stroke="hsl(var(--primary) / 0.5)" strokeWidth="1.5"
+              style={{ pointerEvents: 'none' }}>
+              <animate attributeName="opacity" values="0.6;1;0.6" dur="2.5s" repeatCount="indefinite" />
+            </rect>
+          </>
         )}
       </svg>
+
+      {/* Target label chip */}
+      {isShowing && spotlight && (
+        <div
+          className="fixed z-[9999] pointer-events-none"
+          style={{ top: spotlight.top - 28, left: spotlight.left }}
+        >
+          <span className="inline-block rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-medium text-primary-foreground shadow-md">
+            {step.title.split(' ').slice(0, 2).join(' ')}
+          </span>
+        </div>
+      )}
 
       {/* End screen */}
       {showEndScreen && (
@@ -707,7 +761,7 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
           className="fixed z-[9999] animate-in fade-in-0 duration-150"
           style={{ top: tooltipPos.top, left: tooltipPos.left, width: Math.min(TOOLTIP_MAX_W, vw - 24) }}
           onClick={e => e.stopPropagation()}>
-          <div className="relative rounded-lg border border-border bg-popover p-4 shadow-lg">
+          <div className="relative rounded-xl border border-border bg-popover p-5 shadow-2xl">
             <Arrow side={tooltipPos.arrowSide} offset={tooltipPos.arrowOffset} />
 
             <h3 className="text-[15px] font-semibold text-foreground leading-snug">{step.title}</h3>

@@ -353,16 +353,21 @@ export default function Goals() {
   // Empty state
   if (data.goals.length === 0) {
     return (
-      <div className="max-w-6xl mx-auto flex flex-col items-center justify-center py-24 space-y-4" data-tour="goals-root">
-        <div className="rounded-full bg-primary/10 p-6" data-tour="goals-header"><Target className="h-8 w-8 text-primary" /></div>
-        <h2 className="text-xl font-semibold">No goals yet</h2>
-        <p className="text-muted-foreground text-sm">Set your first goal and start tracking progress.</p>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild><Button data-tour="goals-primary-action"><Plus className="h-4 w-4 mr-1" /> Create your first goal</Button></DialogTrigger>
-          <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>New Goal</DialogTitle></DialogHeader>
-            <GoalForm onSave={handleSave} onClose={() => setDialogOpen(false)} />
-          </DialogContent>
-        </Dialog>
+      <div className="max-w-6xl mx-auto space-y-4" data-tour="goals-root">
+        <div className="flex items-center justify-between min-h-[56px]" data-tour="goals-header">
+          <h1 className="text-2xl font-bold tracking-tight">Goals</h1>
+        </div>
+        <div className="flex flex-col items-center justify-center py-16 space-y-4">
+          <div className="rounded-full bg-primary/10 p-6"><Target className="h-8 w-8 text-primary" /></div>
+          <h2 className="text-xl font-semibold">No goals yet</h2>
+          <p className="text-muted-foreground text-sm">Set your first goal and start tracking progress.</p>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild><Button data-tour="goals-primary-action"><Plus className="h-4 w-4 mr-1" /> Create your first goal</Button></DialogTrigger>
+            <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>New Goal</DialogTitle></DialogHeader>
+              <GoalForm onSave={handleSave} onClose={() => setDialogOpen(false)} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
     );
   }
@@ -383,7 +388,7 @@ export default function Goals() {
         </Card>
       )}
 
-      <div className="flex items-center justify-between" data-tour="goals-header">
+      <div className="flex items-center justify-between min-h-[56px]" data-tour="goals-header">
         <h1 className="text-2xl font-bold tracking-tight">Goals</h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild><Button size="sm" data-tour="goals-primary-action"><Plus className="h-4 w-4 mr-1" /> Add Goal</Button></DialogTrigger>
