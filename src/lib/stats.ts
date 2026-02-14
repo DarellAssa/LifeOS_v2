@@ -3,7 +3,7 @@ import { startOfDay, startOfWeek, endOfWeek, isWithinInterval, differenceInDays,
 
 export function getOverdueTasks(tasks: Task[]): Task[] {
   const todayStr = format(new Date(), 'yyyy-MM-dd');
-  return tasks.filter(t => t.status !== 'done' && t.dueDate && t.dueDate < todayStr);
+  return tasks.filter(t => t.status !== 'done' && t.status !== 'canceled' && t.dueDate && t.dueDate < todayStr);
 }
 
 export function getTasksDoneToday(tasks: Task[]): Task[] {
@@ -147,14 +147,14 @@ export function computeLifeScore(data: AppData, dateISO: string): { score: numbe
   } else {
     tasksScore = 70; // baseline
   }
-  const overdueCount = tasks.filter(t => t.status !== 'done' && t.dueDate && t.dueDate < dateISO).length;
+  const overdueCount = tasks.filter(t => t.status !== 'done' && t.status !== 'canceled' && t.dueDate && t.dueDate < dateISO).length;
   tasksScore -= Math.min(20, overdueCount * 5);
   tasksScore = Math.max(0, Math.min(100, tasksScore));
 
   // 2) Focus component
   const dayBlocks = focusBlocks.filter(fb => format(new Date(fb.startDateTime), 'yyyy-MM-dd') === dateISO);
   const plannedMin = dayBlocks.reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
-  const completedMin = dayBlocks.filter(fb => fb.status === 'completed').reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
+  const completedMin = dayBlocks.filter(fb => fb.status === 'done').reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
   let focusScore: number;
   if (plannedMin > 0) {
     focusScore = (completedMin / plannedMin) * 100;

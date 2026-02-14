@@ -120,7 +120,7 @@ function TaskForm({ onSave, onClose, initial, goals }: {
         <div><Label>Status</Label>
           <Select value={status} onValueChange={v => setStatus(v as TaskStatus)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="todo">To Do</SelectItem><SelectItem value="doing">In Progress</SelectItem><SelectItem value="done">Done</SelectItem></SelectContent>
+            <SelectContent><SelectItem value="todo">To Do</SelectItem><SelectItem value="doing">In Progress</SelectItem><SelectItem value="done">Done</SelectItem><SelectItem value="blocked">Blocked</SelectItem><SelectItem value="canceled">Canceled</SelectItem></SelectContent>
           </Select>
         </div>
       </div>
@@ -241,7 +241,7 @@ export default function Tasks() {
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
   const handleDrop = (status: TaskStatus) => { if (draggedTaskId) { changeTaskStatus(draggedTaskId, status); setDraggedTaskId(null); } };
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const kanbanStatuses: { key: TaskStatus; label: string }[] = [{ key: 'todo', label: 'To Do' }, { key: 'doing', label: 'In Progress' }, { key: 'done', label: 'Done' }];
+  const kanbanStatuses: { key: TaskStatus; label: string }[] = [{ key: 'todo', label: 'To Do' }, { key: 'doing', label: 'In Progress' }, { key: 'blocked', label: 'Blocked' }, { key: 'done', label: 'Done' }];
   const openEdit = (task: Task) => { setEditingTask(task); setDialogOpen(true); };
   const goalTitles = useMemo(() => { const map: Record<string, string> = {}; data.goals.forEach(g => { map[g.id] = g.title; }); return map; }, [data.goals]);
 
@@ -295,7 +295,7 @@ export default function Tasks() {
 
         {tab === 'list' && (
           <div className="flex gap-2 mt-3 flex-wrap">
-            <Select value={filterStatus} onValueChange={setFilterStatus}><SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Status</SelectItem><SelectItem value="todo">To Do</SelectItem><SelectItem value="doing">Doing</SelectItem><SelectItem value="done">Done</SelectItem></SelectContent></Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}><SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Status</SelectItem><SelectItem value="todo">To Do</SelectItem><SelectItem value="doing">Doing</SelectItem><SelectItem value="done">Done</SelectItem><SelectItem value="blocked">Blocked</SelectItem><SelectItem value="canceled">Canceled</SelectItem></SelectContent></Select>
             <Select value={filterPriority} onValueChange={setFilterPriority}><SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Priority</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="med">Medium</SelectItem><SelectItem value="low">Low</SelectItem></SelectContent></Select>
             <Select value={filterDue} onValueChange={setFilterDue}><SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Dates</SelectItem><SelectItem value="today">Today</SelectItem><SelectItem value="week">This Week</SelectItem><SelectItem value="overdue">Overdue</SelectItem></SelectContent></Select>
             <Select value={filterGoal} onValueChange={setFilterGoal}><SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Goals</SelectItem><SelectItem value="none">No Goal</SelectItem>{activeGoals.map(g => <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>)}</SelectContent></Select>
@@ -316,7 +316,7 @@ export default function Tasks() {
 
         {/* KANBAN VIEW */}
         <TabsContent value="kanban" className="mt-3">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             {kanbanStatuses.map(({ key, label }) => {
               const colTasks = smartSort(data.tasks.filter(t => t.status === key));
               return (

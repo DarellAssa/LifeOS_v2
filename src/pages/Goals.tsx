@@ -266,7 +266,7 @@ function GoalDetail({ goalId, onBack }: { goalId: string; onBack: () => void }) 
               <div key={task.id} className="flex items-center gap-2 text-sm rounded-md border border-border p-2 group">
                 <div className={`h-2 w-2 rounded-full shrink-0 ${task.status === 'done' ? 'bg-primary' : 'bg-muted-foreground/30'}`} />
                 <span className={`flex-1 ${task.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>{task.title}</span>
-                <Badge variant="secondary" className="text-[8px] capitalize">{task.status === 'doing' ? 'in progress' : task.status}</Badge>
+                <Badge variant="secondary" className="text-[8px] capitalize">{task.status === 'doing' ? 'in progress' : task.status === 'blocked' ? 'blocked' : task.status}</Badge>
                 <button onClick={() => unlinkTaskFromGoal(task.id)} className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive"><Unlink className="h-3 w-3" /></button>
               </div>
             ))}
@@ -282,7 +282,7 @@ function GoalDetail({ goalId, onBack }: { goalId: string; onBack: () => void }) 
 
       {/* Actions */}
       <div className="flex gap-2 pt-4 border-t border-border">
-        {goal.status === 'active' && <Button variant="outline" size="sm" onClick={() => archiveGoal(goalId)}>Archive</Button>}
+        {goal.status === 'active' && <Button variant="outline" size="sm" onClick={() => archiveGoal(goalId)}>Pause</Button>}
         {!confirmDelete ? (
           <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}><Trash2 className="h-3.5 w-3.5 mr-1" /> Delete</Button>
         ) : (
@@ -325,7 +325,7 @@ function GoalDetail({ goalId, onBack }: { goalId: string; onBack: () => void }) 
 export default function Goals() {
   const { data, addGoal, getGoalProgress, getGoalStatus, completeGoal } = useAppContext();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [tab, setTab] = useState<GoalStatus>('active');
+  const [tab, setTab] = useState<GoalStatus | string>('active');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
@@ -399,7 +399,7 @@ export default function Goals() {
       </div>
 
       <Tabs value={tab} onValueChange={v => setTab(v as GoalStatus)}>
-        <TabsList><TabsTrigger value="active">Active</TabsTrigger><TabsTrigger value="completed">Completed</TabsTrigger><TabsTrigger value="archived">Archived</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="active">Active</TabsTrigger><TabsTrigger value="completed">Completed</TabsTrigger><TabsTrigger value="paused">Paused</TabsTrigger><TabsTrigger value="canceled">Canceled</TabsTrigger></TabsList>
       </Tabs>
 
       {tab === 'active' && (
