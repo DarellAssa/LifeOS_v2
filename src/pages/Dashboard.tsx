@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import { getHabitStreak, computeGoalProgress, getGoalDisplayStatus, computeLifeS
 import { format, addDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { GoalDisplayStatus } from '@/types';
+import { DailyBriefingCard } from '@/components/DailyBriefingCard';
 
 const statusColors: Record<GoalDisplayStatus, string> = {
   'On track': 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
@@ -133,6 +134,11 @@ export default function Dashboard() {
   // Check if user has no data (empty state) - define early for use below
   const hasNoData = tasks.length === 0 && goals.length === 0 && habits.length === 0 && data.events.length === 0;
 
+  // Open copilot via custom event (AppLayout listens)
+  const handleOpenCopilot = useCallback((message?: string) => {
+    window.dispatchEvent(new CustomEvent('open-copilot', { detail: { message } }));
+  }, []);
+
   // Auto-generate life score on first dashboard load per day (only if user has data)
   const todayScore = getLifeScoreForDate(todayStr);
   useEffect(() => {
@@ -246,6 +252,9 @@ export default function Dashboard() {
 
       {!hasNoData && (
         <>
+
+      {/* AI Daily Briefing */}
+      <DailyBriefingCard onOpenCopilot={handleOpenCopilot} />
 
       {/* Daily Digest Banner */}
       {dailyDigest && (

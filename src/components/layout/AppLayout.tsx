@@ -36,6 +36,15 @@ export function AppLayout() {
     setCopilotOpen(true);
   };
 
+  // Listen for custom event from child pages (e.g. Dashboard briefing)
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ message?: string }>) => {
+      openCopilotWith(e.detail?.message);
+    };
+    window.addEventListener('open-copilot' as any, handler);
+    return () => window.removeEventListener('open-copilot' as any, handler);
+  }, []);
+
   // Build tour steps conditionally based on enabled modules
   const tourSteps = useMemo<TourStep[]>(() => {
     const steps: TourStep[] = [
