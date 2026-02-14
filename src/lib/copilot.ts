@@ -121,8 +121,10 @@ export async function sendCopilotMessage({
     });
 
     if (!resp.ok) {
-      const errData = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
-      onError(errData.error || `Error ${resp.status}`);
+      const errData = await resp.json().catch(() => ({ message: `HTTP ${resp.status}` }));
+      const errMsg = errData.message || errData.error || `Error ${resp.status}`;
+      // Pass structured error info so UI can extract requestId
+      onError(JSON.stringify({ message: errMsg, requestId: errData.requestId, stage: errData.stage, status: resp.status }));
       return;
     }
 

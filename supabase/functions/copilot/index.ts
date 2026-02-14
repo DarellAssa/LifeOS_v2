@@ -799,41 +799,66 @@ function checkRateLimit(): boolean {
 }
 
 serve(async (req) => {
+  const requestId = crypto.randomUUID();
+  const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
+  let stage = "init";
   try {
+    // ── Env validation ──
+    stage = "env_validation";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    if (!supabaseUrl) throw new Error("Missing env: SUPABASE_URL");
+    if (!supabaseAnonKey) throw new Error("Missing env: SUPABASE_ANON_KEY");
+    if (!lovableKey) throw new Error("Missing env: LOVABLE_API_KEY");
+    console.log(`[${requestId}] env OK`);
+
+    // ── Rate limit ──
+    stage = "rate_limit";
     if (!checkRateLimit()) {
-      return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ ok: false, stage, message: "Rate limit exceeded.", requestId }), { status: 429, headers: jsonHeaders });
     }
 
-    // Auth
+    // ── Auth ──
+    stage = "auth";
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ ok: false, stage, message: "Missing Authorization header", requestId }), { status: 401, headers: jsonHeaders });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
+      console.error(`[${requestId}] auth failed:`, userError?.message);
+      return new Response(JSON.stringify({ ok: false, stage, message: "Unauthorized", requestId }), { status: 401, headers: jsonHeaders });
     }
-    const userId = claimsData.claims.sub as string;
+    const userId = userData.user.id;
+    console.log(`[${requestId}] auth OK, user=${userId.slice(0, 8)}...`);
 
-    const body = await req.json();
+    // ── Parse body ──
+    stage = "parse_request";
+    let body: any;
+    try {
+      const rawText = await req.text();
+      console.log(`[${requestId}] body length=${rawText.length}`);
+      body = JSON.parse(rawText);
+    } catch {
+      return new Response(JSON.stringify({ ok: false, stage, message: "Invalid JSON body", requestId }), { status: 400, headers: jsonHeaders });
+    }
     const { message, threadId, clientContext, confirmedActionId, confirmedToolCalls } = body;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const LOVABLE_API_KEY = lovableKey;
 
     // ── Resolve or create thread ──
+    stage = "resolve_thread";
     let currentThreadId = threadId as string | null;
     if (!currentThreadId) {
       const title = (message || "").slice(0, 80) || "New chat";
@@ -847,6 +872,7 @@ serve(async (req) => {
     }
 
     // ── Confirmation execution ──
+    stage = "confirmation_exec";
     if (confirmedActionId && confirmedToolCalls) {
       const allActions: string[] = [];
       for (const tc of confirmedToolCalls) {
@@ -869,11 +895,13 @@ serve(async (req) => {
     }
 
     // ── Save user message ──
+    stage = "save_user_message";
     if (message) {
       await persistMessage(supabase, currentThreadId!, userId, "user", message);
     }
 
     // ── Load last 20 messages from thread ──
+    stage = "load_messages";
     const { data: dbMessages } = await supabase.from("copilot_messages")
       .select("role, content, tool_name, tool_args, tool_result")
       .eq("thread_id", currentThreadId)
@@ -881,7 +909,9 @@ serve(async (req) => {
       .limit(20);
 
     // ── Build server-side memory pack ──
+    stage = "load_memory";
     const memoryPack = await buildServerMemoryPack(supabase, userId, clientContext);
+    console.log(`[${requestId}] memory pack built, len=${memoryPack.length}`);
 
     // ── Build AI messages ──
     const aiMessages: any[] = [
@@ -898,6 +928,7 @@ serve(async (req) => {
     }
 
     // ── Multi-turn tool loop (max 5 rounds) ──
+    stage = "call_model";
     let maxRounds = 5;
     let allActionsTaken: string[] = [];
     let allDataUsed: string[] = [];
@@ -1050,9 +1081,9 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
-    console.error("Copilot error:", err);
+    console.error(`[${requestId}] COPILOT_ERR stage=${stage}:`, err?.stack || err?.message || err);
     return new Response(
-      JSON.stringify({ error: err.message || "Internal error" }),
+      JSON.stringify({ ok: false, stage, message: err?.message || "Internal error", requestId }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

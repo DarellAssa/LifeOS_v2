@@ -5,6 +5,7 @@ import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 import { CommandPalette } from '@/components/CommandPalette';
 import { CopilotDrawer } from '@/components/CopilotDrawer';
+import { CopilotErrorBoundary } from '@/components/CopilotErrorBoundary';
 import { GuidedTour, TourStep } from '@/components/GuidedTour';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -118,7 +119,9 @@ export function AppLayout() {
         </div>
       </div>
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} onOpenCopilot={openCopilotWith} />
-      <CopilotDrawer open={copilotOpen} onOpenChange={setCopilotOpen} initialMessage={copilotInitialMsg} />
+      <CopilotErrorBoundary>
+        <CopilotDrawer open={copilotOpen} onOpenChange={setCopilotOpen} initialMessage={copilotInitialMsg} />
+      </CopilotErrorBoundary>
       <GuidedTour steps={tourSteps} />
     </SidebarProvider>
   );

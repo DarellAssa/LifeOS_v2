@@ -4,7 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle, Sparkles, ShieldCheck, X, Plus, MessageSquare, Trash2 } from 'lucide-react';
+import { Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle, Sparkles, ShieldCheck, X, Plus, MessageSquare, Trash2, Copy, Bug } from 'lucide-react';
 import { useAppContext } from '@/store/AppContext';
 import {
   CopilotMessage, CopilotThread, PendingConfirmation,
@@ -27,6 +27,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDebug, setErrorDebug] = useState<{ requestId?: string; status?: number; response?: string; route?: string } | null>(null);
   const [showThreadList, setShowThreadList] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -91,7 +92,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isStreaming) return;
     setError(null);
-
+    setErrorDebug(null);
     const userMsg: CopilotMessage = { role: 'user', content: text.trim(), timestamp: new Date().toISOString() };
     const newMsgs = [...messages, userMsg];
     setMessages(newMsgs);
@@ -163,6 +164,13 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
       },
       onError: (err) => {
         setError(err);
+        // Try to parse requestId from error JSON
+        try {
+          const parsed = JSON.parse(err);
+          setErrorDebug({ requestId: parsed.requestId, stage: parsed.stage, status: parsed.status, response: err, route: window.location.pathname } as any);
+        } catch {
+          setErrorDebug({ response: err, route: window.location.pathname });
+        }
         setIsStreaming(false);
       },
       abortSignal: abortController.signal,
@@ -426,9 +434,40 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
 
         {/* Error */}
         {error && (
-          <div className="mx-4 mb-2 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            {error}
+          <div className="mx-4 mb-2 space-y-1.5">
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span className="flex-1 min-w-0 truncate">{error}</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => { setError(null); setErrorDebug(null); }}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+            {errorDebug && (
+              <Button
+                variant="outline" size="sm"
+                className="h-6 text-[10px] gap-1 w-full"
+                onClick={() => {
+                  const pack = {
+                    requestId: errorDebug.requestId || 'unknown',
+                    status: errorDebug.status,
+                    response: errorDebug.response?.slice(0, 500),
+                    route: errorDebug.route,
+                    userId: 'masked',
+                    ts: new Date().toISOString(),
+                  };
+                  navigator.clipboard.writeText(JSON.stringify(pack, null, 2));
+                }}
+              >
+                <Bug className="h-3 w-3" /> Copy Debug Pack
+              </Button>
+            )}
+            <Button
+              variant="ghost" size="sm"
+              className="h-6 text-[10px] gap-1 w-full text-muted-foreground"
+              onClick={() => { setError(null); setErrorDebug(null); sendMessage(messages[messages.length - 2]?.content || input || ''); }}
+            >
+              Retry last message
+            </Button>
           </div>
         )}
 
