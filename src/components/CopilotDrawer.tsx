@@ -9,11 +9,12 @@ import {
   Send, Square, Bot, User, ChevronDown, Wrench, Database, AlertCircle,
   Sparkles, ShieldCheck, X, Plus, MessageSquare, Trash2, Bug,
   ListChecks, Play, CheckCircle2, XCircle, Edit3, Clock, AlertTriangle, Calendar,
+  Inbox, ArrowRight, FileText, Target, Archive,
 } from 'lucide-react';
 import { useAppContext } from '@/store/AppContext';
 import {
   CopilotMessage, CopilotThread, CopilotPlan, PendingConfirmation, ToolRun,
-  CopilotMode, ScheduleOperation, ScheduleConflict,
+  CopilotMode, ScheduleOperation, ScheduleConflict, TriageItem, TriageDecision,
   sendCopilotMessage, confirmCopilotAction, approvePlan, cancelPlan,
   loadThreads, loadThreadMessages, deleteThread,
 } from '@/lib/copilot';
@@ -130,6 +131,131 @@ function SchedulePreviewCard({
   );
 }
 
+// ── Action label helpers ──
+const ACTION_LABELS: Record<string, { label: string; icon: typeof FileText; color: string }> = {
+  convert_task: { label: 'Task', icon: ListChecks, color: 'text-primary' },
+  convert_note: { label: 'Note', icon: FileText, color: 'text-blue-500' },
+  convert_event: { label: 'Event', icon: Calendar, color: 'text-purple-500' },
+  convert_goal: { label: 'Goal', icon: Target, color: 'text-amber-500' },
+  archive: { label: 'Archive', icon: Archive, color: 'text-muted-foreground' },
+  leave: { label: 'Skip', icon: X, color: 'text-muted-foreground' },
+};
+
+const CONFIDENCE_STYLES: Record<string, string> = {
+  high: 'text-primary bg-primary/10',
+  med: 'text-amber-600 dark:text-amber-400 bg-amber-500/10',
+  low: 'text-muted-foreground bg-muted',
+};
+
+// ── Inbox Triage Review Card ──
+function InboxTriageReviewCard({
+  items,
+  onDecisionsChange,
+  decisions,
+}: {
+  items: TriageItem[];
+  decisions: TriageDecision[];
+  onDecisionsChange: (decisions: TriageDecision[]) => void;
+}) {
+  if (!items || items.length === 0) return null;
+
+  // Summary chips
+  const summary = { convert_task: 0, convert_note: 0, convert_event: 0, convert_goal: 0, archive: 0, leave: 0 };
+  for (const d of decisions) {
+    if (d.action in summary) (summary as any)[d.action]++;
+  }
+
+  const updateDecision = (itemId: string, patch: Partial<TriageDecision>) => {
+    onDecisionsChange(decisions.map(d => d.item_id === itemId ? { ...d, ...patch } : d));
+  };
+
+  const hasLowConfidence = items.some(it => {
+    const d = decisions.find(dd => dd.item_id === it.item_id);
+    return d && d.action !== 'leave' && it.confidence === 'low';
+  });
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-2 mt-1">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+        <Inbox className="h-3.5 w-3.5 text-primary" />
+        Inbox Triage Review
+        <span className="text-muted-foreground font-normal">({items.length} items)</span>
+      </div>
+
+      {/* Summary chips */}
+      <div className="flex flex-wrap gap-1.5">
+        {summary.convert_task > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">Tasks: {summary.convert_task}</span>}
+        {summary.convert_note > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500">Notes: {summary.convert_note}</span>}
+        {summary.convert_event > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500">Events: {summary.convert_event}</span>}
+        {summary.convert_goal > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500">Goals: {summary.convert_goal}</span>}
+        {summary.archive > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Archive: {summary.archive}</span>}
+        {summary.leave > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Skip: {summary.leave}</span>}
+      </div>
+
+      {/* Low confidence warning */}
+      {hasLowConfidence && (
+        <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded px-2 py-1">
+          <AlertTriangle className="h-3 w-3" />
+          Some items have low confidence — review before applying.
+        </div>
+      )}
+
+      {/* Items list */}
+      <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+        {items.map(item => {
+          const d = decisions.find(dd => dd.item_id === item.item_id);
+          if (!d) return null;
+          const actionInfo = ACTION_LABELS[d.action] || ACTION_LABELS.leave;
+          const IconComp = actionInfo.icon;
+
+          return (
+            <div key={item.item_id} className="rounded border border-border bg-background p-2 space-y-1">
+              {/* Row 1: Original content + confidence */}
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[11px] text-muted-foreground truncate flex-1" title={item.original_content}>
+                  {item.original_title || item.original_content.slice(0, 60)}
+                </p>
+                <span className={`text-[9px] px-1 py-0.5 rounded font-medium shrink-0 ${CONFIDENCE_STYLES[item.confidence]}`}>
+                  {item.confidence.toUpperCase()}
+                </span>
+              </div>
+
+              {/* Row 2: Action selector + title */}
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={d.action}
+                  onChange={(e) => updateDecision(item.item_id, { action: e.target.value })}
+                  className="text-[10px] h-6 px-1 rounded border border-border bg-background text-foreground"
+                >
+                  <option value="convert_task">→ Task</option>
+                  <option value="convert_note">→ Note</option>
+                  <option value="convert_event">→ Event</option>
+                  <option value="convert_goal">→ Goal</option>
+                  <option value="archive">Archive</option>
+                  <option value="leave">Skip</option>
+                </select>
+                <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  value={(d.fields?.title as string) || ''}
+                  onChange={(e) => updateDecision(item.item_id, { fields: { ...d.fields, title: e.target.value } })}
+                  className="text-[11px] h-6 px-1.5 rounded border border-border bg-background text-foreground flex-1 min-w-0"
+                  placeholder="Title"
+                />
+              </div>
+
+              {/* Row 3: Reason */}
+              {item.reason && (
+                <p className="text-[9px] text-muted-foreground italic">{item.reason}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Plan Preview Card ──
 function PlanPreviewCard({
   plan,
@@ -138,6 +264,8 @@ function PlanPreviewCard({
   onEdit,
   isExecuting,
   executionResult,
+  triageDecisions,
+  onTriageDecisionsChange,
 }: {
   plan: CopilotPlan;
   onApprove: () => void;
@@ -145,6 +273,8 @@ function PlanPreviewCard({
   onEdit: () => void;
   isExecuting: boolean;
   executionResult?: { summary: string; toolRuns: ToolRun[] } | null;
+  triageDecisions?: TriageDecision[];
+  onTriageDecisionsChange?: (decisions: TriageDecision[]) => void;
 }) {
   const [showTools, setShowTools] = useState(false);
   const isApproved = plan.approved === true;
@@ -152,6 +282,7 @@ function PlanPreviewCard({
   const isPending = plan.approved === undefined;
 
   const hasScheduleOps = plan.schedule_operations && plan.schedule_operations.length > 0;
+  const hasTriageItems = plan.triage_items && plan.triage_items.length > 0;
 
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2.5">
@@ -170,6 +301,15 @@ function PlanPreviewCard({
           operations={plan.schedule_operations}
           conflicts={plan.schedule_conflicts}
           alternatives={plan.schedule_alternatives}
+        />
+      )}
+
+      {/* Triage review (if triage plan) */}
+      {hasTriageItems && triageDecisions && onTriageDecisionsChange && (
+        <InboxTriageReviewCard
+          items={plan.triage_items!}
+          decisions={triageDecisions}
+          onDecisionsChange={onTriageDecisionsChange}
         />
       )}
 
@@ -247,7 +387,7 @@ function PlanPreviewCard({
           </p>
           <div className="flex gap-2">
             <Button size="sm" className="h-7 text-xs gap-1" onClick={onApprove} disabled={isExecuting}>
-              <Play className="h-3 w-3" /> Approve
+              <Play className="h-3 w-3" /> Approve & Apply
             </Button>
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onEdit} disabled={isExecuting}>
               <Edit3 className="h-3 w-3" /> Edit
@@ -287,6 +427,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
   const [showThreadList, setShowThreadList] = useState(false);
   const [mode, setMode] = useState<CopilotMode>('chat');
   const [executionResults, setExecutionResults] = useState<Map<number, { summary: string; toolRuns: ToolRun[] }>>(new Map());
+  const [triageDecisionsMap, setTriageDecisionsMap] = useState<Map<number, TriageDecision[]>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -407,6 +548,16 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
           pendingPlan: plan,
           timestamp: new Date().toISOString(),
         };
+        const msgIndex = messages.length + 1; // +1 for user msg already added
+        // Initialize triage decisions from plan's triage_items
+        if (plan.triage_items && plan.triage_items.length > 0) {
+          const initialDecisions: TriageDecision[] = plan.triage_items.map(item => ({
+            item_id: item.item_id,
+            action: item.suggested_action,
+            fields: { title: item.suggested.title, ...( item.suggested.due_date ? { due_date: item.suggested.due_date } : {}), ...(item.suggested.priority ? { priority: item.suggested.priority } : {}), ...(item.suggested.tags?.length ? { tags: item.suggested.tags } : {}) },
+          }));
+          setTriageDecisionsMap(prev => new Map(prev).set(msgIndex, initialDecisions));
+        }
         setMessages(prev => [...prev, planMsg]);
         setIsStreaming(false);
         abortRef.current = null;
@@ -451,6 +602,19 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
     const msg = messages[msgIndex];
     if (!msg.pendingPlan || !activeThreadId) return;
 
+    // Inject triage decisions into plan steps if available
+    const plan = { ...msg.pendingPlan };
+    const decisions = triageDecisionsMap.get(msgIndex);
+    if (decisions && decisions.length > 0) {
+      // Find triage_commit step and inject decisions
+      plan.steps = plan.steps.map(step => {
+        if (step.tool === 'triage_commit') {
+          return { ...step, args: { ...step.args, decisions: decisions.filter(d => d.action !== 'leave'), confirm: true } };
+        }
+        return step;
+      });
+    }
+
     setMessages(prev => prev.map((m, i) =>
       i === msgIndex ? { ...m, pendingPlan: { ...m.pendingPlan!, approved: true } } : m
     ));
@@ -458,7 +622,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
     setError(null);
 
     await approvePlan({
-      plan: msg.pendingPlan,
+      plan,
       threadId: activeThreadId,
       onDone: (summary, toolRuns, actionsTaken) => {
         setExecutionResults(prev => new Map(prev).set(msgIndex, { summary, toolRuns }));
@@ -718,6 +882,8 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
                       onEdit={() => handleEditPlan(i)}
                       isExecuting={isStreaming}
                       executionResult={executionResults.get(i)}
+                      triageDecisions={triageDecisionsMap.get(i)}
+                      onTriageDecisionsChange={(decisions) => setTriageDecisionsMap(prev => new Map(prev).set(i, decisions))}
                     />
                   )}
 
