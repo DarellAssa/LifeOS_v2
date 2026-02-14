@@ -682,47 +682,70 @@ export function AppProvider({ children }: { children: ReactNode }) {
       tags: [], pinned: false, detected,
     };
     update(d => ({ ...d, inboxItems: [...d.inboxItems, item] }));
+    if (userId) dbUpsertInboxItem(userId, item);
     toast({ title: 'Saved to Inbox', description: item.title });
     return item;
-  }, [update]);
+  }, [update, userId]);
 
   const updateInboxItem = useCallback((id: string, updates: Partial<InboxItem>) => {
-    update(d => ({
-      ...d, inboxItems: d.inboxItems.map(i => {
+    update(d => {
+      const newItems = d.inboxItems.map(i => {
         if (i.id !== id) return i;
         const updated = { ...i, ...updates, updatedAt: new Date().toISOString() };
         if (updates.content) updated.detected = detectInboxContent(updates.content);
         return updated;
-      }),
-    }));
-  }, [update]);
+      });
+      const item = newItems.find(i => i.id === id);
+      if (item && userId) dbUpsertInboxItem(userId, item);
+      return { ...d, inboxItems: newItems };
+    });
+  }, [update, userId]);
 
   const deleteInboxItem = useCallback((id: string) => {
     update(d => ({ ...d, inboxItems: d.inboxItems.filter(i => i.id !== id) }));
+    if (userId) dbDeleteInboxItem(userId, id);
     toast({ title: 'Inbox item deleted' });
-  }, [update]);
+  }, [update, userId]);
 
   const archiveInboxItem = useCallback((id: string) => {
-    update(d => ({ ...d, inboxItems: d.inboxItems.map(i => i.id === id ? { ...i, status: 'archived' as const, updatedAt: new Date().toISOString() } : i) }));
+    update(d => {
+      const newItems = d.inboxItems.map(i => i.id === id ? { ...i, status: 'archived' as const, updatedAt: new Date().toISOString() } : i);
+      const item = newItems.find(i => i.id === id);
+      if (item && userId) dbUpsertInboxItem(userId, item);
+      return { ...d, inboxItems: newItems };
+    });
     toast({ title: 'Archived' });
-  }, [update]);
+  }, [update, userId]);
 
   const pinInboxItem = useCallback((id: string, pinned: boolean) => {
-    update(d => ({ ...d, inboxItems: d.inboxItems.map(i => i.id === id ? { ...i, pinned, updatedAt: new Date().toISOString() } : i) }));
-  }, [update]);
+    update(d => {
+      const newItems = d.inboxItems.map(i => i.id === id ? { ...i, pinned, updatedAt: new Date().toISOString() } : i);
+      const item = newItems.find(i => i.id === id);
+      if (item && userId) dbUpsertInboxItem(userId, item);
+      return { ...d, inboxItems: newItems };
+    });
+  }, [update, userId]);
 
   const setInboxStatus = useCallback((id: string, status: InboxItem['status']) => {
-    update(d => ({ ...d, inboxItems: d.inboxItems.map(i => i.id === id ? { ...i, status, updatedAt: new Date().toISOString() } : i) }));
-  }, [update]);
+    update(d => {
+      const newItems = d.inboxItems.map(i => i.id === id ? { ...i, status, updatedAt: new Date().toISOString() } : i);
+      const item = newItems.find(i => i.id === id);
+      if (item && userId) dbUpsertInboxItem(userId, item);
+      return { ...d, inboxItems: newItems };
+    });
+  }, [update, userId]);
 
   const markInboxConverted = useCallback((inboxId: string, kind: InboxItem['conversion'] extends undefined ? never : NonNullable<InboxItem['conversion']>['kind'], entityId: string) => {
-    update(d => ({
-      ...d, inboxItems: d.inboxItems.map(i => i.id === inboxId ? {
+    update(d => {
+      const newItems = d.inboxItems.map(i => i.id === inboxId ? {
         ...i, status: 'converted' as const, updatedAt: new Date().toISOString(),
         conversion: { kind, entityId, convertedAt: new Date().toISOString() },
-      } : i),
-    }));
-  }, [update]);
+      } : i);
+      const item = newItems.find(i => i.id === inboxId);
+      if (item && userId) dbUpsertInboxItem(userId, item);
+      return { ...d, inboxItems: newItems };
+    });
+  }, [update, userId]);
 
   const convertInboxToTask = useCallback((inboxId: string, payload: Partial<Task>) => {
     const item = data.inboxItems.find(i => i.id === inboxId);
@@ -734,12 +757,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(), tags: payload.tags || item.tags,
       subtasks: payload.subtasks || [], goalId: payload.goalId,
     };
+    const convertedItem = { ...item, status: 'converted' as const, updatedAt: new Date().toISOString(), conversion: { kind: 'task' as const, entityId: task.id, convertedAt: new Date().toISOString() } };
     update(d => ({
       ...d, tasks: [...d.tasks, task],
-      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: new Date().toISOString(), conversion: { kind: 'task' as const, entityId: task.id, convertedAt: new Date().toISOString() } } : i),
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? convertedItem : i),
     }));
+    if (userId) {
+      dbUpsertTask(userId, task);
+      dbUpsertInboxItem(userId, convertedItem);
+    }
     toast({ title: 'Converted to Task', description: task.title });
-  }, [update, data.inboxItems]);
+  }, [update, data.inboxItems, userId]);
 
   const convertInboxToGoal = useCallback((inboxId: string, payload: Partial<Goal>) => {
     const item = data.inboxItems.find(i => i.id === inboxId);
@@ -754,12 +782,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       linkedTaskIds: payload.linkedTaskIds || [], milestones: payload.milestones || [],
       createdAt: now, updatedAt: now,
     };
+    const convertedItem = { ...item, status: 'converted' as const, updatedAt: now, conversion: { kind: 'goal' as const, entityId: goal.id, convertedAt: now } };
     update(d => ({
       ...d, goals: [...d.goals, goal],
-      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'goal' as const, entityId: goal.id, convertedAt: now } } : i),
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? convertedItem : i),
     }));
+    if (userId) {
+      dbUpsertGoal(userId, goal);
+      dbUpsertInboxItem(userId, convertedItem);
+    }
     toast({ title: 'Converted to Goal', description: goal.title });
-  }, [update, data.inboxItems]);
+  }, [update, data.inboxItems, userId]);
 
   const convertInboxToEvent = useCallback((inboxId: string, payload: Partial<CalendarEvent>) => {
     const item = data.inboxItems.find(i => i.id === inboxId);
@@ -774,12 +807,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       category: payload.category || 'personal', recurring: payload.recurring || null,
       createdAt: now, updatedAt: now,
     };
+    const convertedItem = { ...item, status: 'converted' as const, updatedAt: now, conversion: { kind: 'event' as const, entityId: event.id, convertedAt: now } };
     update(d => ({
       ...d, events: [...d.events, event],
-      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'event' as const, entityId: event.id, convertedAt: now } } : i),
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? convertedItem : i),
     }));
+    if (userId) {
+      dbUpsertEvent(userId, event);
+      dbUpsertInboxItem(userId, convertedItem);
+    }
     toast({ title: 'Converted to Event', description: event.title });
-  }, [update, data.inboxItems]);
+  }, [update, data.inboxItems, userId]);
 
   const convertInboxToHabit = useCallback((inboxId: string, payload: Partial<Habit>) => {
     const item = data.inboxItems.find(i => i.id === inboxId);
@@ -791,12 +829,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       frequency: payload.frequency || 'daily', targetCountPerPeriod: payload.targetCountPerPeriod || 1,
       category: payload.category || 'personal', logs: [], createdAt: now, updatedAt: now, status: 'active',
     };
+    const convertedItem = { ...item, status: 'converted' as const, updatedAt: now, conversion: { kind: 'habit' as const, entityId: habit.id, convertedAt: now } };
     update(d => ({
       ...d, habits: [...d.habits, habit],
-      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'habit' as const, entityId: habit.id, convertedAt: now } } : i),
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? convertedItem : i),
     }));
+    if (userId) {
+      dbUpsertHabit(userId, habit);
+      dbUpsertInboxItem(userId, convertedItem);
+    }
     toast({ title: 'Converted to Habit', description: habit.title });
-  }, [update, data.inboxItems]);
+  }, [update, data.inboxItems, userId]);
 
   const convertInboxToFocusBlock = useCallback((inboxId: string, payload: Partial<FocusBlock>) => {
     const item = data.inboxItems.find(i => i.id === inboxId);
@@ -810,12 +853,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       linkedTaskId: payload.linkedTaskId, linkedGoalId: payload.linkedGoalId,
       status: 'planned', notes: payload.notes || item.content, createdAt: now, updatedAt: now,
     };
+    const convertedItem = { ...item, status: 'converted' as const, updatedAt: now, conversion: { kind: 'focusBlock' as const, entityId: block.id, convertedAt: now } };
     update(d => ({
       ...d, focusBlocks: [...d.focusBlocks, block],
-      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'focusBlock' as const, entityId: block.id, convertedAt: now } } : i),
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? convertedItem : i),
     }));
+    if (userId) {
+      dbUpsertFocusBlock(userId, block);
+      dbUpsertInboxItem(userId, convertedItem);
+    }
     toast({ title: 'Converted to Focus Block', description: block.title });
-  }, [update, data.inboxItems]);
+  }, [update, data.inboxItems, userId]);
 
   const convertInboxToNote = useCallback((inboxId: string, payload: Partial<Note>) => {
     const item = data.inboxItems.find(i => i.id === inboxId);
@@ -826,12 +874,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       content: payload.content || item.content, createdAt: now, updatedAt: now,
       tags: payload.tags || item.tags, pinned: payload.pinned || false,
     };
+    const convertedItem = { ...item, status: 'converted' as const, updatedAt: now, conversion: { kind: 'note' as const, entityId: note.id, convertedAt: now } };
     update(d => ({
       ...d, notes: [...d.notes, note],
-      inboxItems: d.inboxItems.map(i => i.id === inboxId ? { ...i, status: 'converted' as const, updatedAt: now, conversion: { kind: 'note' as const, entityId: note.id, convertedAt: now } } : i),
+      inboxItems: d.inboxItems.map(i => i.id === inboxId ? convertedItem : i),
     }));
+    if (userId) {
+      dbUpsertNote(userId, note);
+      dbUpsertInboxItem(userId, convertedItem);
+    }
     toast({ title: 'Converted to Note', description: note.title });
-  }, [update, data.inboxItems]);
+  }, [update, data.inboxItems, userId]);
 
   // ── Notes ──
   const createNote = useCallback((note: Note) => {
