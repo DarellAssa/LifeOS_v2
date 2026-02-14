@@ -551,9 +551,10 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
         const msgIndex = messages.length + 1; // +1 for user msg already added
         // Initialize triage decisions from plan's triage_items
         if (plan.triage_items && plan.triage_items.length > 0) {
+          // Default: only include HIGH confidence items as active; MED/LOW default to 'leave'
           const initialDecisions: TriageDecision[] = plan.triage_items.map(item => ({
             item_id: item.item_id,
-            action: item.suggested_action,
+            action: item.confidence === 'high' ? item.suggested_action : 'leave',
             fields: { title: item.suggested.title, ...( item.suggested.due_date ? { due_date: item.suggested.due_date } : {}), ...(item.suggested.priority ? { priority: item.suggested.priority } : {}), ...(item.suggested.tags?.length ? { tags: item.suggested.tags } : {}) },
           }));
           setTriageDecisionsMap(prev => new Map(prev).set(msgIndex, initialDecisions));

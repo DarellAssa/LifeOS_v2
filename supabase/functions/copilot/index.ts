@@ -13,6 +13,34 @@ const ROUTE_MAP: Record<string, string> = {
   inbox: "/inbox", event: "/calendar", focus: "/calendar", habit: "/habits",
 };
 
+// ══════════════════════════════════════════════════════════════
+// TOOL PERMISSION GATE — strict allowlists
+// ══════════════════════════════════════════════════════════════
+const READ_ONLY_TOOLS = new Set([
+  "search_lifeos",
+  "parse_time_request",
+  "check_schedule_conflicts",
+  "propose_time_alternatives",
+  "schedule_preview",
+  "propose_inbox_triage",
+  "triage_preview",
+]);
+
+const WRITE_TOOLS = new Set([
+  "create_task",
+  "update_task",
+  "create_event",
+  "create_goal",
+  "apply_template",
+  "schedule_task_focus_block",
+  "commit_schedule",
+  "triage_commit",
+]);
+
+function isWriteTool(toolName: string): boolean {
+  return WRITE_TOOLS.has(toolName);
+}
+
 // ── Shared expansion prompt ──
 const EXPANSION_SYSTEM_PROMPT = `You are a search query expander for a personal productivity app (tasks, goals, events, habits, notes, inbox items, focus blocks).
 Given a user's search query, output a JSON array of 3-5 alternative search terms including synonyms, related words, and rephrased versions.
@@ -310,7 +338,7 @@ RULES:
 6. No deletes unless user explicitly asked for deletion.
 7. If updates > 3, set requires_confirmation=true on those steps.
 8. Max 6 steps per plan.
-9. Available tools: search_lifeos, create_task, update_task, schedule_task_focus_block, create_event, create_goal, triage_inbox, apply_template, parse_time_request, check_schedule_conflicts, schedule_preview, commit_schedule, propose_inbox_triage, triage_preview, triage_commit.
+9. Available tools: search_lifeos, create_task, update_task, schedule_task_focus_block, create_event, create_goal, apply_template, parse_time_request, check_schedule_conflicts, schedule_preview, commit_schedule, propose_inbox_triage, triage_preview, triage_commit.
 10. For scheduling requests: always use parse_time_request first, then schedule_preview, then commit_schedule.
 11. For triage requests: always use propose_inbox_triage first, then triage_preview, then triage_commit.`;
 
@@ -347,6 +375,7 @@ RULES:
 9. NEVER guess dates the user didn't specify. Set confidence accordingly.
 10. Output ONLY the JSON object.`;
 
+// ── TOOLS definition (removed legacy triage_inbox) ──
 const TOOLS = [
   {
     type: "function",
@@ -479,22 +508,6 @@ const TOOLS = [
   {
     type: "function",
     function: {
-      name: "triage_inbox",
-      description: "Convert inbox items into tasks, events, goals, habits, or notes. REQUIRES user confirmation.",
-      parameters: {
-        type: "object",
-        properties: {
-          inboxIds: { type: "array", items: { type: "string" } },
-          convertTo: { type: "string", enum: ["task", "event", "goal", "habit", "note"] },
-          defaults: { type: "object", description: "Default fields for created entities" },
-        },
-        required: ["inboxIds", "convertTo"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
       name: "apply_template",
       description: "Apply a template to create entities. REQUIRES user confirmation.",
       parameters: {
@@ -573,7 +586,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "commit_schedule",
-      description: "Execute schedule operations (create/update events and focus blocks). REQUIRES prior preview.",
+      description: "Execute schedule operations (create/update events and focus blocks). REQUIRES prior preview and approval.",
       parameters: {
         type: "object",
         properties: {
@@ -642,7 +655,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "triage_commit",
-      description: "Execute triage decisions: create entities + archive inbox items. REQUIRES approval.",
+      description: "Execute triage decisions: create entities + archive inbox items. REQUIRES approval via /approve route only.",
       parameters: {
         type: "object",
         properties: {
@@ -666,7 +679,8 @@ const TOOLS = [
   },
 ];
 
-const RISKY_TOOLS = new Set(["triage_inbox", "apply_template", "commit_schedule", "triage_commit"]);
+// Read-only tools for chat mode (no writes allowed in chat)
+const CHAT_MODE_TOOLS = TOOLS.filter(t => READ_ONLY_TOOLS.has(t.function.name));
 
 // ── Tool Execution Functions ──
 
@@ -816,78 +830,6 @@ async function executeCreateGoal(
   return { output: { id: data.id, route: "/goals" }, actionsTaken: [`Created goal "${args.title}"`], dataUsed: [], createdEntities: [{ type: "goal", id: data.id }] };
 }
 
-async function executeTriageInbox(
-  supabase: ReturnType<typeof createClient>, userId: string,
-  args: { inboxIds: string[]; convertTo: string; defaults?: Record<string, unknown> }
-): Promise<ToolExecResult> {
-  const now = new Date().toISOString();
-  const converted: { inboxId: string; kind: string; entityId: string }[] = [];
-  const createdEntities: { type: string; id: string }[] = [];
-  for (const inboxId of (args.inboxIds || []).slice(0, 20)) {
-    const { data: item } = await supabase.from("inbox_items").select("*").eq("id", inboxId).eq("user_id", userId).single();
-    if (!item) continue;
-    let entityId = "";
-    const defaults = args.defaults || {};
-    switch (args.convertTo) {
-      case "task": {
-        const { data } = await supabase.from("tasks").insert({
-          user_id: userId, title: item.title || (item.content || "").slice(0, 100),
-          status: "todo", priority: (defaults.priority as string) || "med",
-          tags: [], subtasks: [], source: "inbox", created_at: now, updated_at: now,
-        }).select("id").single();
-        entityId = data?.id || "";
-        if (entityId) createdEntities.push({ type: "task", id: entityId });
-        break;
-      }
-      case "event": {
-        const { data } = await supabase.from("calendar_events").insert({
-          user_id: userId, title: item.title || (item.content || "").slice(0, 100),
-          start_date_time: (defaults.startDateTime as string) || now,
-          end_date_time: (defaults.endDateTime as string) || new Date(Date.now() + 3600000).toISOString(),
-          category: "personal", created_at: now, updated_at: now,
-        }).select("id").single();
-        entityId = data?.id || "";
-        if (entityId) createdEntities.push({ type: "event", id: entityId });
-        break;
-      }
-      case "goal": {
-        const today = now.slice(0, 10);
-        const { data } = await supabase.from("goals").insert({
-          user_id: userId, title: item.title || (item.content || "").slice(0, 100),
-          status: "active", category: "custom", start_date: today,
-          target_date: (defaults.targetDate as string) || today,
-          progress_type: "manual", progress_value: 0,
-          linked_task_ids: [], milestones: [], created_at: now, updated_at: now,
-        }).select("id").single();
-        entityId = data?.id || "";
-        if (entityId) createdEntities.push({ type: "goal", id: entityId });
-        break;
-      }
-      case "note": {
-        const { data } = await supabase.from("notes").insert({
-          user_id: userId, title: item.title || (item.content || "").slice(0, 60),
-          content: item.content || "", tags: [], pinned: false,
-          created_at: now, updated_at: now,
-        }).select("id").single();
-        entityId = data?.id || "";
-        if (entityId) createdEntities.push({ type: "note", id: entityId });
-        break;
-      }
-    }
-    if (entityId) {
-      await supabase.from("inbox_items").update({
-        status: "converted", conversion: { kind: args.convertTo, entityId, convertedAt: now }, updated_at: now,
-      }).eq("id", inboxId).eq("user_id", userId);
-      converted.push({ inboxId, kind: args.convertTo, entityId });
-    }
-  }
-  return {
-    output: { converted },
-    actionsTaken: [`Converted ${converted.length} inbox items to ${args.convertTo}s`],
-    dataUsed: [], createdEntities,
-  };
-}
-
 async function executeApplyTemplate(
   supabase: ReturnType<typeof createClient>, userId: string,
   args: { templateId: string; runDate: string }
@@ -988,7 +930,6 @@ async function executeParseTimeRequest(
       return { output: { error: "Failed to parse time", needs_followup: true, followup_question: "Could you specify the exact date and time?" }, actionsTaken: [], dataUsed: [] };
     }
     const parsed = JSON.parse(match[0]);
-    // Validate required fields
     if (!parsed.intent || !parsed.kind) {
       return { output: { error: "Incomplete time parse", needs_followup: true, followup_question: "What would you like to schedule and when?" }, actionsTaken: [], dataUsed: [] };
     }
@@ -1059,7 +1000,6 @@ async function executeProposTimeAlternatives(
     const dayDate = new Date(startDate.getTime() + d * 86400000);
     const dayStr = dayDate.toISOString().slice(0, 10);
 
-    // Try morning, midday, afternoon slots
     const slots = [
       { h: wsH, m: wsM, label: "morning" },
       { h: 12, m: 0, label: "midday" },
@@ -1074,12 +1014,9 @@ async function executeProposTimeAlternatives(
       const slotStart = new Date(`${dayStr}T${String(slot.h).padStart(2, "0")}:${String(slot.m).padStart(2, "0")}:00`);
       const slotEnd = new Date(slotStart.getTime() + durationMs);
 
-      // Skip if same as original
       if (slotStart.toISOString() === args.start_at) continue;
-      // Skip if outside work hours
       if (slotEnd.getHours() > weH || (slotEnd.getHours() === weH && slotEnd.getMinutes() > weM)) continue;
 
-      // Check conflicts for this slot
       const { data: evConflicts } = await supabase.from("calendar_events")
         .select("id")
         .eq("user_id", userId)
@@ -1264,21 +1201,23 @@ Given a list of inbox items, output STRICT JSON matching this schema for each it
 
 RULES:
 1. Classify based on content: actionable items → task, reference info → note, time-specific → event, long-term ambition → goal, spam/noise → archive, unclear → leave.
-2. If confidence is low, set suggested_action to "leave" unless content is clearly classifiable.
-3. NEVER invent dates. Only extract dates if explicitly stated in content (e.g. "due Friday", "meeting at 3pm").
-4. Keep reasons factual and under 120 characters.
-5. Title should be clean and concise (max 80 chars).
-6. Output ONLY the JSON object.`;
+2. If confidence is low, set suggested_action to "leave" — do NOT force a conversion for low confidence items.
+3. If confidence is med, prefer conservative actions (leave or note) unless content is clearly actionable.
+4. Only use "archive" for items that are clearly spam, noise, or duplicates with HIGH confidence.
+5. NEVER invent dates. Only extract dates if explicitly stated in content (e.g. "due Friday", "meeting at 3pm").
+6. Keep reasons factual and under 120 characters.
+7. Title should be clean and concise (max 80 chars).
+8. Output ONLY the JSON object.`;
 
 async function executeProposInboxTriage(
   supabase: ReturnType<typeof createClient>, userId: string, apiKey: string,
-  args: { limit?: number; scope?: string; preferences?: { timezone?: string } }
+  args: { limit?: number; scope?: string; preferences?: { timezone?: string; default_tags?: string[]; work_hours?: string[] } }
 ): Promise<ToolExecResult> {
   const limit = Math.min(args.limit || 20, 50);
   const scope = args.scope || "unprocessed";
 
   let query = supabase.from("inbox_items")
-    .select("id, title, content, tags, source, created_at")
+    .select("id, title, content, tags, source, created_at, detected")
     .eq("user_id", userId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
@@ -1290,12 +1229,16 @@ async function executeProposInboxTriage(
 
   const { data: items, error } = await query;
   if (error) return { output: { error: error.message }, actionsTaken: [], dataUsed: [] };
-  if (!items || items.length === 0) {
-    return { output: { items: [], summary: { convert_task: 0, convert_note: 0, convert_event: 0, convert_goal: 0, archive: 0, leave: 0 } }, actionsTaken: [], dataUsed: ["inbox_items"] };
-  }
+  if (!items || items.length === 0) return { output: { items: [], summary: {} }, actionsTaken: [], dataUsed: ["inbox_items"] };
 
-  // Build prompt with items
-  const itemsText = items.map(it => `- ID: ${it.id}\n  Title: ${it.title || "(none)"}\n  Content: ${(it.content || "").slice(0, 200)}\n  Source: ${it.source}\n  Created: ${it.created_at}`).join("\n\n");
+  // Call AI to classify
+  const itemsForAI = items.map(item => ({
+    item_id: item.id,
+    title: item.title,
+    content: (item.content || "").slice(0, 300),
+    tags: item.tags || [],
+    source: item.source,
+  }));
 
   try {
     const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -1305,21 +1248,24 @@ async function executeProposInboxTriage(
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: TRIAGE_SYSTEM_PROMPT },
-          { role: "user", content: `Timezone: ${args.preferences?.timezone || "UTC"}\n\nInbox items to classify:\n\n${itemsText}` },
+          { role: "user", content: `Timezone: ${args.preferences?.timezone || "UTC"}\n\nItems:\n${JSON.stringify(itemsForAI)}` },
         ],
         max_tokens: 4000, temperature: 0.2,
       }),
     });
 
     if (!resp.ok) {
-      // Fallback: return items with "leave" suggestion
-      const fallbackItems = items.map(it => ({
-        item_id: it.id, original_title: it.title, original_content: (it.content || "").slice(0, 200),
-        suggested_action: "leave" as const, confidence: "low" as const,
-        suggested: { title: it.title || (it.content || "").slice(0, 80) },
-        reason: "AI unavailable, manual review needed",
+      // Fallback: return items with "leave" action
+      const fallbackItems = items.map(item => ({
+        item_id: item.id,
+        original_title: item.title,
+        original_content: (item.content || "").slice(0, 200),
+        suggested_action: "leave" as const,
+        confidence: "low" as const,
+        suggested: { title: item.title || (item.content || "").slice(0, 60) },
+        reason: "AI classification unavailable — please review manually.",
       }));
-      return { output: { items: fallbackItems, summary: { convert_task: 0, convert_note: 0, convert_event: 0, convert_goal: 0, archive: 0, leave: fallbackItems.length } }, actionsTaken: [], dataUsed: ["inbox_items"] };
+      return { output: { items: fallbackItems, summary: { leave: fallbackItems.length } }, actionsTaken: [], dataUsed: ["inbox_items"] };
     }
 
     const data = await resp.json();
@@ -1327,49 +1273,30 @@ async function executeProposInboxTriage(
     const match = content.match(/\{[\s\S]*\}/);
 
     if (!match) {
-      const fallbackItems = items.map(it => ({
-        item_id: it.id, original_title: it.title, original_content: (it.content || "").slice(0, 200),
-        suggested_action: "leave" as const, confidence: "low" as const,
-        suggested: { title: it.title || (it.content || "").slice(0, 80) },
-        reason: "Classification failed, manual review needed",
-      }));
-      return { output: { items: fallbackItems, summary: { convert_task: 0, convert_note: 0, convert_event: 0, convert_goal: 0, archive: 0, leave: fallbackItems.length } }, actionsTaken: [], dataUsed: ["inbox_items"] };
+      return { output: { error: "Failed to parse triage response" }, actionsTaken: [], dataUsed: [] };
     }
 
     const parsed = JSON.parse(match[0]);
-    const classifiedItems = (parsed.items || []).map((ci: any) => {
-      const original = items.find(it => it.id === ci.item_id);
+    const triageItems = (parsed.items || []).map((ai: any) => {
+      const original = items.find(i => i.id === ai.item_id);
       return {
-        item_id: ci.item_id,
+        item_id: ai.item_id,
         original_title: original?.title || null,
         original_content: (original?.content || "").slice(0, 200),
-        suggested_action: ["convert_task", "convert_note", "convert_event", "convert_goal", "archive", "leave"].includes(ci.suggested_action) ? ci.suggested_action : "leave",
-        confidence: ["low", "med", "high"].includes(ci.confidence) ? ci.confidence : "low",
-        suggested: {
-          title: ci.suggested?.title || original?.title || (original?.content || "").slice(0, 80),
-          notes: ci.suggested?.notes || null,
-          due_date: ci.suggested?.due_date || null,
-          start_at: ci.suggested?.start_at || null,
-          end_at: ci.suggested?.end_at || null,
-          priority: ci.suggested?.priority || null,
-          tags: ci.suggested?.tags || [],
-          category: ci.suggested?.category || null,
-        },
-        reason: (ci.reason || "").slice(0, 120),
+        suggested_action: ai.suggested_action || "leave",
+        confidence: ai.confidence || "low",
+        suggested: ai.suggested || { title: original?.title || "" },
+        reason: (ai.reason || "").slice(0, 120),
       };
     });
 
     // Build summary
-    const summary = { convert_task: 0, convert_note: 0, convert_event: 0, convert_goal: 0, archive: 0, leave: 0 };
-    for (const ci of classifiedItems) {
-      if (ci.suggested_action in summary) (summary as any)[ci.suggested_action]++;
+    const summary: Record<string, number> = {};
+    for (const item of triageItems) {
+      summary[item.suggested_action] = (summary[item.suggested_action] || 0) + 1;
     }
 
-    return {
-      output: { items: classifiedItems, summary },
-      actionsTaken: [],
-      dataUsed: [`Classified ${classifiedItems.length} inbox items`],
-    };
+    return { output: { items: triageItems, summary }, actionsTaken: [], dataUsed: ["inbox_items", "ai_classification"] };
   } catch (err: any) {
     return { output: { error: err.message }, actionsTaken: [], dataUsed: [] };
   }
@@ -1380,21 +1307,20 @@ function executeTriagePreview(
 ): ToolExecResult {
   const decisions = args.decisions || [];
   const operations: any[] = [];
-  const warnings: string[] = [];
   let creates = 0, updates = 0;
+  const warnings: string[] = [];
 
   for (const d of decisions) {
     if (d.action === "leave") continue;
+
     if (d.action === "archive") {
-      operations.push({ op: "archive", kind: "inbox", source_item_id: d.item_id, title: (d.fields?.title as string) || "Inbox item", route: "/inbox", risk: "low" });
+      operations.push({ op: "archive", kind: "inbox", source_item_id: d.item_id, title: (d.fields?.title as string) || "Archived item", route: "/inbox", risk: "low" });
       updates++;
     } else {
-      const kind = d.action.replace("convert_", "");
+      const kindMap: Record<string, string> = { convert_task: "task", convert_note: "note", convert_event: "event", convert_goal: "goal" };
+      const kind = kindMap[d.action] || "task";
       operations.push({ op: "create", kind, source_item_id: d.item_id, title: (d.fields?.title as string) || "Untitled", route: `/${kind === "task" ? "tasks" : kind === "note" ? "notes" : kind === "event" ? "calendar" : "goals"}`, risk: "low" });
       creates++;
-      // Also archive the source
-      operations.push({ op: "update", kind: "inbox", source_item_id: d.item_id, title: "Mark as converted", route: "/inbox", risk: "low" });
-      updates++;
     }
   }
 
@@ -1510,7 +1436,7 @@ async function executeTriageCommit(
       createdEntities.push({ type: entityKind, id: entityId });
       created.push({ kind: entityKind, id: entityId, title, route: `/${entityKind === "task" ? "tasks" : entityKind === "note" ? "notes" : entityKind === "event" ? "calendar" : "goals"}` });
 
-      // Mark inbox item as converted
+      // Mark inbox item as converted (NOT deleted)
       await supabase.from("inbox_items").update({
         status: "converted",
         conversion: { kind: entityKind, entityId, convertedAt: now },
@@ -1539,7 +1465,6 @@ async function executeTool(
     case "schedule_task_focus_block": return await executeScheduleFocusBlock(supabase, userId, args as any);
     case "create_event": return await executeCreateEvent(supabase, userId, args as any);
     case "create_goal": return await executeCreateGoal(supabase, userId, args as any);
-    case "triage_inbox": return await executeTriageInbox(supabase, userId, args as any);
     case "apply_template": return await executeApplyTemplate(supabase, userId, args as any);
     case "parse_time_request": return await executeParseTimeRequest(apiKey, args as any);
     case "check_schedule_conflicts": return await executeCheckScheduleConflicts(supabase, userId, args as any);
@@ -1590,10 +1515,6 @@ async function persistMessage(
 
 function describeAction(name: string, args: Record<string, unknown>): string {
   switch (name) {
-    case "triage_inbox": {
-      const ids = (args.inboxIds as string[]) || [];
-      return `Convert ${ids.length} inbox item(s) to ${args.convertTo}`;
-    }
     case "apply_template": return `Apply template ${args.templateId} on ${args.runDate}`;
     case "create_task": return `Create task "${args.title}"`;
     case "update_task": return `Update task ${args.id}`;
@@ -1642,7 +1563,7 @@ interface ToolRun {
 
 const VALID_TOOLS = new Set([
   "search_lifeos", "create_task", "update_task", "schedule_task_focus_block",
-  "create_event", "create_goal", "triage_inbox", "apply_template",
+  "create_event", "create_goal", "apply_template",
   "parse_time_request", "check_schedule_conflicts", "propose_time_alternatives",
   "schedule_preview", "commit_schedule",
   "propose_inbox_triage", "triage_preview", "triage_commit",
@@ -1660,7 +1581,6 @@ function validatePlan(raw: any): { valid: boolean; plan?: Plan; error?: string }
     if (!step.args || typeof step.args !== "object") return { valid: false, error: `Step ${i + 1}: missing args` };
   }
 
-  // Safety: block deletes unless explicitly planned
   const overall = raw.overall_impact || { creates: 0, updates: 0, deletes: 0 };
   if (overall.deletes > 0) return { valid: false, error: "Plans with deletions are not supported in v1" };
 
@@ -1681,6 +1601,15 @@ function validatePlan(raw: any): { valid: boolean; plan?: Plan; error?: string }
   };
 
   return { valid: true, plan };
+}
+
+// ── Plan hash generation ──
+async function generatePlanHash(plan: any): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(JSON.stringify(plan));
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 // AI call helpers
@@ -1788,66 +1717,97 @@ serve(async (req) => {
     // ════════════════════════════════════════
     if (subRoute === "approve") {
       stage = "plan_approve";
-      const { threadId, plan: rawPlan } = body;
+      const { threadId, plan: rawPlan, requestId: planRequestId, planHash: clientPlanHash } = body;
       if (!threadId || !rawPlan) {
         return new Response(JSON.stringify({ error: "threadId and plan required" }), { status: 400, headers: jsonHeaders });
       }
 
-      const { valid, plan, error: planErr } = validatePlan(rawPlan);
-      if (!valid || !plan) {
-        return new Response(JSON.stringify({ error: `Invalid plan: ${planErr}` }), { status: 400, headers: jsonHeaders });
+      // ── Plan hash validation ──
+      if (planRequestId && clientPlanHash) {
+        // Use service role to read plan requests
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const adminClient = createClient(supabaseUrl, serviceKey);
+
+        const { data: planReq } = await adminClient.from("copilot_plan_requests")
+          .select("id, plan_hash, used_at")
+          .eq("request_id", planRequestId)
+          .eq("user_id", userId)
+          .single();
+
+        if (!planReq) {
+          return new Response(JSON.stringify({ error: "Invalid or expired plan request. Please regenerate the plan." }), { status: 400, headers: jsonHeaders });
+        }
+        if (planReq.used_at) {
+          return new Response(JSON.stringify({ error: "This plan has already been executed." }), { status: 400, headers: jsonHeaders });
+        }
+        if (planReq.plan_hash !== clientPlanHash) {
+          return new Response(JSON.stringify({ error: "Plan hash mismatch. The plan may have been tampered with." }), { status: 400, headers: jsonHeaders });
+        }
+
+        // Verify the provided plan actually matches the hash
+        const computedHash = await generatePlanHash(rawPlan);
+        if (computedHash !== clientPlanHash) {
+          return new Response(JSON.stringify({ error: "Plan content does not match the approved hash." }), { status: 400, headers: jsonHeaders });
+        }
+
+        // Mark as used
+        await adminClient.from("copilot_plan_requests")
+          .update({ used_at: new Date().toISOString() })
+          .eq("id", planReq.id);
       }
 
-      // Execute steps sequentially
+      const { valid, plan, error: planErr } = validatePlan(rawPlan);
+      if (!valid || !plan) {
+        return new Response(JSON.stringify({ error: planErr || "Invalid plan" }), { status: 400, headers: jsonHeaders });
+      }
+
+      // Execute plan steps sequentially — WRITE TOOLS ALLOWED HERE
       const toolRuns: ToolRun[] = [];
-      const allActionsTaken: string[] = [];
+      const allActions: string[] = [];
 
       for (let i = 0; i < plan.steps.length; i++) {
         const step = plan.steps[i];
         try {
           const result = await executeTool(supabase, userId, LOVABLE_API_KEY, step.tool, step.args);
+          await logAudit(supabase, userId, threadId, step.tool, step.args,
+            result.output.error ? "failed" : "success",
+            result.output.error as string | undefined,
+            result.createdEntities);
+
           const entities = (result.createdEntities || []).map(e => ({
-            kind: e.type, id: e.id,
-            title: (step.args.title as string) || step.label,
-            route: ROUTE_MAP[e.type] || "/",
+            kind: e.type, id: e.id, title: "", route: ROUTE_MAP[e.type] || "/",
           }));
 
           toolRuns.push({
             stepIndex: i, tool: step.tool,
             ok: !result.output.error,
-            summary: result.actionsTaken.join("; ") || step.label,
+            summary: result.actionsTaken.join("; ") || (result.output.error ? `Error: ${result.output.error}` : "Done"),
             entities,
             error: result.output.error as string | undefined,
           });
 
-          allActionsTaken.push(...result.actionsTaken);
-
-          await logAudit(supabase, userId, threadId, step.tool, step.args,
-            result.output.error ? "failed" : "success",
-            result.output.error as string | undefined, result.createdEntities);
-          await persistMessage(supabase, threadId, userId, "tool",
-            JSON.stringify(result.output), step.tool, step.args, result.output);
+          allActions.push(...result.actionsTaken);
         } catch (err: any) {
+          await logAudit(supabase, userId, threadId, step.tool, step.args, "error", err.message);
           toolRuns.push({
             stepIndex: i, tool: step.tool, ok: false,
-            summary: `Failed: ${err.message}`, entities: [],
-            error: err.message,
+            summary: `Error: ${err.message}`, entities: [], error: err.message,
           });
-          await logAudit(supabase, userId, threadId, step.tool, step.args, "error", err.message);
-          break;
         }
       }
 
-      // Generate summary
-      const successCount = toolRuns.filter(r => r.ok).length;
-      const summaryText = `✅ Plan "${plan.title}" executed: ${successCount}/${plan.steps.length} steps completed. ${allActionsTaken.join(". ")}`;
-      await persistMessage(supabase, threadId, userId, "assistant", summaryText);
+      const summary = allActions.length > 0
+        ? `✅ Plan executed: ${allActions.join(". ")}`
+        : "Plan executed but no actions were taken.";
+
+      await persistMessage(supabase, threadId, userId, "assistant", summary);
 
       return new Response(JSON.stringify({
-        status: "executed",
-        summary: summaryText,
+        type: "plan_executed",
+        summary,
         toolRuns,
-        actionsTaken: allActionsTaken,
+        actionsTaken: allActions,
         threadId,
       }), { headers: jsonHeaders });
     }
@@ -1856,45 +1816,45 @@ serve(async (req) => {
     // SUB-ROUTE: /copilot/cancel
     // ════════════════════════════════════════
     if (subRoute === "cancel") {
-      stage = "plan_cancel";
-      const { threadId } = body;
-      if (threadId) {
-        await persistMessage(supabase, threadId, userId, "assistant", "Plan cancelled by user.");
-      }
-      return new Response(JSON.stringify({ status: "cancelled", threadId }), { headers: jsonHeaders });
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
     }
 
     // ════════════════════════════════════════
-    // MAIN ROUTE: /copilot (chat or plan_do)
+    // MAIN ROUTE: /copilot
     // ════════════════════════════════════════
-    const { message, threadId, clientContext, confirmedActionId, confirmedToolCalls, mode } = body;
-    const copilotMode = mode || "chat";
+    const { message, threadId, clientContext, mode: copilotMode, confirmedActionId, confirmedToolCalls } = body;
 
-    // ── Resolve or create thread ──
-    stage = "resolve_thread";
-    let currentThreadId = threadId as string | null;
+    if (!message && !confirmedActionId) {
+      return new Response(
+        JSON.stringify({ error: "Either 'message' or 'confirmedActionId' is required." }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
+
+    // ── Thread handling ──
+    stage = "thread_upsert";
+    let currentThreadId = threadId;
     if (!currentThreadId) {
-      const title = (message || "").slice(0, 80) || "New chat";
-      const { data: thread, error: threadErr } = await supabase.from("copilot_threads").insert({
-        user_id: userId, title,
+      const { data: thread } = await supabase.from("copilot_threads").insert({
+        user_id: userId, title: (message || "").slice(0, 50) || "New chat",
       }).select("id").single();
-      if (threadErr || !thread) {
-        return new Response(JSON.stringify({ error: "Failed to create thread" }), { status: 500, headers: jsonHeaders });
-      }
-      currentThreadId = thread.id;
+      currentThreadId = thread?.id;
     }
 
-    // ── Confirmation execution (existing flow) ──
-    stage = "confirmation_exec";
+    if (!currentThreadId) {
+      return new Response(JSON.stringify({ error: "Failed to create thread" }), { status: 500, headers: jsonHeaders });
+    }
+
+    // ── Handle confirmed tool calls (Chat mode risky tools) ──
     if (confirmedActionId && confirmedToolCalls) {
+      stage = "execute_confirmed";
       const allActions: string[] = [];
       for (const tc of confirmedToolCalls) {
-        const args = typeof tc.arguments === "string" ? JSON.parse(tc.arguments) : tc.arguments;
+        const args = JSON.parse(tc.arguments || tc.args || "{}");
         const result = await executeTool(supabase, userId, LOVABLE_API_KEY, tc.name, args);
         allActions.push(...result.actionsTaken);
         await logAudit(supabase, userId, currentThreadId, tc.name, args,
-          result.output.error ? "failed" : "success",
-          result.output.error as string | undefined, result.createdEntities);
+          result.output.error ? "failed" : "success", result.output.error as string | undefined, result.createdEntities);
         await persistMessage(supabase, currentThreadId!, userId, "tool", JSON.stringify(result.output), tc.name, args, result.output);
       }
       const confirmContent = `✅ Done! ${allActions.join(". ")}`;
@@ -1927,12 +1887,11 @@ serve(async (req) => {
     console.log(`[${requestId}] context built, len=${contextJson.length}, intent=${intent.goal}`);
 
     // ════════════════════════════════════════
-    // PLAN & DO MODE
+    // PLAN & DO MODE — READ-ONLY (no write tools executed here)
     // ════════════════════════════════════════
     if (copilotMode === "plan_do") {
       stage = "plan_generate";
 
-      // If intent says needs_followup, return that
       if (intent.needs_followup && intent.followup_question) {
         await persistMessage(supabase, currentThreadId!, userId, "assistant", intent.followup_question);
         return new Response(JSON.stringify({
@@ -1942,7 +1901,7 @@ serve(async (req) => {
         }), { headers: jsonHeaders });
       }
 
-      // For scheduling intents, run time parsing inline first
+      // For scheduling intents, run time parsing inline first (READ-ONLY tools)
       let scheduleContext = "";
       if (intent.goal === "schedule" && message) {
         const tz = clientContext?.timezone || "UTC";
@@ -1955,7 +1914,6 @@ serve(async (req) => {
 
         if (parseResult.output && !parseResult.output.error) {
           const parsedTime = parseResult.output as any;
-          // Check conflicts if we have times
           let conflictsData: any = null;
           if (parsedTime.start_at && parsedTime.end_at) {
             const conflictResult = await executeCheckScheduleConflicts(supabase, userId, {
@@ -1972,7 +1930,6 @@ serve(async (req) => {
             conflictsData = conflictResult.output;
           }
 
-          // Get alternatives if conflicts
           let alternatives: any = null;
           if (conflictsData && !conflictsData.is_conflict_free && parsedTime.start_at) {
             const endAt = parsedTime.end_at || new Date(new Date(parsedTime.start_at).getTime() + (parsedTime.duration_minutes || 60) * 60000).toISOString();
@@ -1999,7 +1956,7 @@ serve(async (req) => {
         }
       }
 
-      // For triage intents, run propose_inbox_triage inline first
+      // For triage intents, run propose_inbox_triage inline first (READ-ONLY)
       let triageContext = "";
       let triageItems: any[] | null = null;
       if (intent.goal === "triage") {
@@ -2036,7 +1993,6 @@ serve(async (req) => {
       const planResp = await callAIPlanning(LOVABLE_API_KEY, planMessages);
       const planContent = planResp.choices?.[0]?.message?.content || "";
 
-      // Try to parse as JSON
       const jsonMatch = planContent.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         await persistMessage(supabase, currentThreadId!, userId, "assistant", planContent);
@@ -2050,7 +2006,6 @@ serve(async (req) => {
 
       const parsed = JSON.parse(jsonMatch[0]);
 
-      // Check if it's a needs_followup response
       if (parsed.status === "needs_followup") {
         const q = parsed.question || "Could you provide more details?";
         await persistMessage(supabase, currentThreadId!, userId, "assistant", q);
@@ -2062,7 +2017,6 @@ serve(async (req) => {
         }), { headers: jsonHeaders });
       }
 
-      // Validate plan
       const { valid, plan, error: planErr } = validatePlan(parsed);
       if (!valid) {
         const errMsg = `I couldn't generate a valid plan: ${planErr}. Could you rephrase your request?`;
@@ -2080,6 +2034,20 @@ serve(async (req) => {
         (plan as any).triage_items = triageItems;
       }
 
+      // ── Generate plan hash and store request ──
+      const planRequestId = crypto.randomUUID();
+      const planHash = await generatePlanHash(plan);
+      
+      // Store with service role (bypasses RLS for insert)
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const adminClient = createClient(supabaseUrl, serviceKey);
+      await adminClient.from("copilot_plan_requests").insert({
+        user_id: userId,
+        request_id: planRequestId,
+        plan_hash: planHash,
+      });
+
       // Persist the plan as a message for history
       await persistMessage(supabase, currentThreadId!, userId, "assistant",
         `📋 Plan: ${plan!.title}\n${plan!.steps.map((s, i) => `${i + 1}. ${s.label}`).join("\n")}`);
@@ -2087,15 +2055,17 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         type: "plan",
         plan: plan!,
+        requestId: planRequestId,
+        planHash,
         threadId: currentThreadId,
       }), { headers: jsonHeaders });
     }
 
     // ════════════════════════════════════════
-    // CHAT MODE (existing flow)
+    // CHAT MODE — READ-ONLY (only read tools available to AI)
     // ════════════════════════════════════════
     const aiMessages: any[] = [
-      { role: "system", content: `${SYSTEM_PROMPT}\n\n## Retrieved Context\n${contextJson}` },
+      { role: "system", content: `${SYSTEM_PROMPT}\n\n## Retrieved Context\n${contextJson}\n\nIMPORTANT: You are in Chat mode. You can ONLY search and read data. For any actions that modify data (create, update, delete, triage, schedule), tell the user to switch to Plan & Do mode using the toggle at the top of the chat.` },
     ];
 
     for (const m of (dbMessages || [])) {
@@ -2103,7 +2073,7 @@ serve(async (req) => {
       aiMessages.push({ role: m.role === "system" ? "user" : m.role, content: m.content });
     }
 
-    // ── Multi-turn tool loop (max 5 rounds) ──
+    // ── Multi-turn tool loop (max 5 rounds) — READ-ONLY TOOLS ONLY ──
     stage = "call_model";
     let maxRounds = 5;
     let allActionsTaken: string[] = [];
@@ -2114,7 +2084,7 @@ serve(async (req) => {
       const isLastRound = maxRounds === 0;
 
       if (isLastRound) {
-        const streamResp = await callAIStreaming(LOVABLE_API_KEY, aiMessages, TOOLS);
+        const streamResp = await callAIStreaming(LOVABLE_API_KEY, aiMessages, CHAT_MODE_TOOLS);
         if (!streamResp.ok) {
           const status = streamResp.status;
           await streamResp.text();
@@ -2161,8 +2131,8 @@ serve(async (req) => {
         return new Response(readable, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
       }
 
-      // Non-streaming round
-      const aiResp = await callAINonStreaming(LOVABLE_API_KEY, aiMessages, TOOLS);
+      // Non-streaming round — only read-only tools
+      const aiResp = await callAINonStreaming(LOVABLE_API_KEY, aiMessages, CHAT_MODE_TOOLS);
       const choice = aiResp.choices?.[0];
       if (!choice) break;
 
@@ -2170,54 +2140,25 @@ serve(async (req) => {
       aiMessages.push(msg);
 
       if (msg.tool_calls && msg.tool_calls.length > 0) {
-        const riskyCalls = msg.tool_calls.filter((tc: any) => RISKY_TOOLS.has(tc.function.name));
-
-        if (riskyCalls.length > 0) {
-          const safeCalls = msg.tool_calls.filter((tc: any) => !RISKY_TOOLS.has(tc.function.name));
-          for (const tc of safeCalls) {
-            const args = JSON.parse(tc.function.arguments);
-            const result = await executeTool(supabase, userId, LOVABLE_API_KEY, tc.function.name, args);
-            allActionsTaken.push(...result.actionsTaken);
-            allDataUsed.push(...result.dataUsed);
-            await logAudit(supabase, userId, currentThreadId, tc.function.name, args,
-              result.output.error ? "failed" : "success", result.output.error as string | undefined, result.createdEntities);
-            await persistMessage(supabase, currentThreadId!, userId, "tool", JSON.stringify(result.output), tc.function.name, args, result.output);
-          }
-
-          const pendingActions = riskyCalls.map((tc: any) => ({
-            id: tc.id,
-            name: tc.function.name,
-            arguments: tc.function.arguments,
-            description: describeAction(tc.function.name, JSON.parse(tc.function.arguments)),
-          }));
-
-          for (const tc of riskyCalls) {
-            await logAudit(supabase, userId, currentThreadId, tc.function.name,
-              JSON.parse(tc.function.arguments), "needs_confirmation");
-          }
-
-          return new Response(
-            JSON.stringify({
-              type: "confirmation_required",
-              actionId: crypto.randomUUID(),
-              pendingActions,
-              message: msg.content || "",
-              actionsTaken: allActionsTaken,
-              dataUsed: allDataUsed,
-              threadId: currentThreadId,
-            }),
-            { headers: jsonHeaders }
-          );
-        }
-
         for (const tc of msg.tool_calls) {
+          const toolName = tc.function.name;
           const args = JSON.parse(tc.function.arguments);
-          const result = await executeTool(supabase, userId, LOVABLE_API_KEY, tc.function.name, args);
+
+          // ── WRITE GATE: Block any write tool in chat/planning mode ──
+          if (isWriteTool(toolName)) {
+            console.warn(`[${requestId}] WRITE_BLOCKED_IN_CHAT: ${toolName}`);
+            const blockedResult = { ok: false, error: "WRITE_BLOCKED_IN_CHAT", message: "This action requires Plan & Do mode. Please switch to Plan & Do mode to make changes." };
+            await logAudit(supabase, userId, currentThreadId, toolName, args, "blocked_write");
+            aiMessages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(blockedResult) });
+            continue;
+          }
+
+          const result = await executeTool(supabase, userId, LOVABLE_API_KEY, toolName, args);
           allActionsTaken.push(...result.actionsTaken);
           allDataUsed.push(...result.dataUsed);
-          await logAudit(supabase, userId, currentThreadId, tc.function.name, args,
+          await logAudit(supabase, userId, currentThreadId, toolName, args,
             result.output.error ? "failed" : "success", result.output.error as string | undefined, result.createdEntities);
-          await persistMessage(supabase, currentThreadId!, userId, "tool", JSON.stringify(result.output), tc.function.name, args, result.output);
+          await persistMessage(supabase, currentThreadId!, userId, "tool", JSON.stringify(result.output), toolName, args, result.output);
           aiMessages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result.output) });
         }
         continue;

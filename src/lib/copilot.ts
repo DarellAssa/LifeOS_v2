@@ -103,6 +103,8 @@ export interface CopilotPlan {
   schedule_alternatives?: { start_at: string; end_at: string; reason: string }[] | null;
   triage_items?: TriageItem[] | null;
   approved?: boolean; // undefined = pending, true = approved, false = cancelled
+  requestId?: string;
+  planHash?: string;
 }
 
 export interface ToolRun {
@@ -222,7 +224,9 @@ export async function sendCopilotMessage({
 
       // Plan response
       if (data.type === 'plan' && data.plan) {
-        onPlanGenerated?.(data.plan, rThreadId);
+        // Attach requestId and planHash to plan for approval validation
+        const planWithAuth = { ...data.plan, requestId: data.requestId, planHash: data.planHash };
+        onPlanGenerated?.(planWithAuth, rThreadId);
         return;
       }
 
@@ -375,7 +379,7 @@ export async function approvePlan({
     const resp = await fetch(`${CHAT_URL}/approve`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ threadId, plan }),
+      body: JSON.stringify({ threadId, plan, requestId: plan.requestId, planHash: plan.planHash }),
     });
 
     if (!resp.ok) {
