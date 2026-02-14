@@ -308,10 +308,10 @@ OUTPUT FORMAT: You MUST output ONLY a JSON object matching this exact schema:
       "tool": "tool_name",
       "args": { ... tool arguments ... },
       "requires_confirmation": false,
-      "expected_impact": { "creates": 0, "updates": 0, "deletes": 0 }
+      "expected_impact": { "creates": 0, "updates": 0, "archives": 0, "deletes": 0 }
     }
   ],
-  "overall_impact": { "creates": 0, "updates": 0, "deletes": 0 },
+  "overall_impact": { "creates": 0, "updates": 0, "archives": 0, "deletes": 0 },
   "assumptions": ["assumption 1"],
   "questions": [],
   "schedule_operations": null,
@@ -328,6 +328,8 @@ TRIAGE:
 - Include a single step: triage_commit with requires_confirmation=true.
 - Set "triage_items" in the plan to the output of propose_inbox_triage (will be injected automatically).
 - For non-triage requests, set triage_items to null.
+- IMPORTANT: Triage archiving is NON-DESTRUCTIVE (reversible). Use "archives" in impact, NOT "deletes".
+- overall_impact.deletes MUST be 0 for triage plans. Use overall_impact.archives for archived inbox items.
 
 RULES:
 1. Output ONLY the JSON plan. No markdown, no explanation, no wrapping.
@@ -1307,7 +1309,7 @@ function executeTriagePreview(
 ): ToolExecResult {
   const decisions = args.decisions || [];
   const operations: any[] = [];
-  let creates = 0, updates = 0;
+  let creates = 0, updates = 0, archives = 0;
   const warnings: string[] = [];
 
   for (const d of decisions) {
@@ -1315,7 +1317,7 @@ function executeTriagePreview(
 
     if (d.action === "archive") {
       operations.push({ op: "archive", kind: "inbox", source_item_id: d.item_id, title: (d.fields?.title as string) || "Archived item", route: "/inbox", risk: "low" });
-      updates++;
+      archives++;
     } else {
       const kindMap: Record<string, string> = { convert_task: "task", convert_note: "note", convert_event: "event", convert_goal: "goal" };
       const kind = kindMap[d.action] || "task";
@@ -1329,7 +1331,7 @@ function executeTriagePreview(
   }
 
   return {
-    output: { operations, impact: { creates, updates, deletes: 0 }, warnings },
+    output: { operations, impact: { creates, updates, archives, deletes: 0 }, warnings },
     actionsTaken: [],
     dataUsed: ["triage_preview"],
   };
@@ -1539,14 +1541,14 @@ interface PlanStep {
   tool: string;
   args: Record<string, unknown>;
   requires_confirmation: boolean;
-  expected_impact: { creates: number; updates: number; deletes: number };
+  expected_impact: { creates: number; updates: number; archives: number; deletes: number };
 }
 
 interface Plan {
   title: string;
   goal: string;
   steps: PlanStep[];
-  overall_impact: { creates: number; updates: number; deletes: number };
+  overall_impact: { creates: number; updates: number; archives: number; deletes: number };
   assumptions: string[];
   questions: string[];
   schedule_operations?: any[] | null;
@@ -1581,8 +1583,9 @@ function validatePlan(raw: any): { valid: boolean; plan?: Plan; error?: string }
     if (!step.args || typeof step.args !== "object") return { valid: false, error: `Step ${i + 1}: missing args` };
   }
 
-  const overall = raw.overall_impact || { creates: 0, updates: 0, deletes: 0 };
-  if (overall.deletes > 0) return { valid: false, error: "Plans with deletions are not supported in v1" };
+  const overall = raw.overall_impact || { creates: 0, updates: 0, archives: 0, deletes: 0 };
+  // Only block real destructive deletes (hard delete / deleted_at). Archives are non-destructive and allowed.
+  if ((overall.deletes || 0) > 0) return { valid: false, error: "Plans with destructive deletions are not supported in v1. Use 'archive' for non-destructive operations." };
 
   const plan: Plan = {
     title: raw.title,
@@ -1592,7 +1595,7 @@ function validatePlan(raw: any): { valid: boolean; plan?: Plan; error?: string }
       tool: s.tool,
       args: s.args,
       requires_confirmation: !!s.requires_confirmation,
-      expected_impact: s.expected_impact || { creates: 0, updates: 0, deletes: 0 },
+      expected_impact: s.expected_impact || { creates: 0, updates: 0, archives: 0, deletes: 0 },
     })),
     overall_impact: overall,
     assumptions: Array.isArray(raw.assumptions) ? raw.assumptions : [],
