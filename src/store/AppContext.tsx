@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { AppData, Task, Goal, CalendarEvent, FocusBlock, Habit, DailyCheckIn, LifeScoreSnapshot, WeeklyPlan, UserProfile, GoalDisplayStatus, NotificationItem, NotificationSettings, DEFAULT_NOTIFICATION_SETTINGS, InboxItem, Note, Template, AutomationRule, AutomationRunLog } from '@/types';
-import { ApplyTemplateResult, applyTemplate as applyTemplateEngine, evaluateConditions, isThrottled, shouldRunTimeRule, executeActions, BUILT_IN_TEMPLATES, BUILT_IN_AUTOMATIONS } from '@/lib/automations';
+import { ApplyTemplateResult, applyTemplate as applyTemplateEngine, evaluateConditions, isThrottled, executeActions, BUILT_IN_TEMPLATES, BUILT_IN_AUTOMATIONS } from '@/lib/automations';
 import { toast } from '@/hooks/use-toast';
 import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInMinutes, addDays, addMinutes, isSameDay, parseISO, subDays } from 'date-fns';
 import { computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon as getGoalsDueSoonUtil, computeLifeScore } from '@/lib/stats';
-import { generateNotifications, isQuietHours } from '@/lib/notifications';
+// Notifications now generated server-side via run-jobs edge function
 import { detectInboxContent, deriveTitle } from '@/lib/inbox';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchAllUserData, dbUpsertTask, dbDeleteTask, dbUpsertGoal, dbDeleteGoal, dbUpsertEvent, dbDeleteEvent, dbUpsertFocusBlock, dbDeleteFocusBlock, dbUpsertHabit, dbDeleteHabit, dbUpsertHabitLog, dbDeleteHabitLog, dbUpsertCheckIn, dbDeleteCheckIn, dbUpsertScore, dbUpsertWeeklyPlan, dbUpsertNotification, dbUpdateNotification, dbUpsertNotificationSettings, dbUpsertInboxItem, dbDeleteInboxItem, dbUpsertNote, dbDeleteNote, dbUpsertTemplate, dbDeleteTemplate, dbUpsertAutomationRule, dbDeleteAutomationRule, dbInsertAutomationLog, dbUpsertPinnedFocus } from '@/lib/db';
@@ -665,36 +665,72 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast({ title: 'Notification settings updated' });
   }, [update]);
 
-  const runNotificationGeneration = useCallback(() => {
-    const newNotifs = generateNotifications(data);
-    if (newNotifs.length > 0) {
-      update(d => ({ ...d, notifications: [...d.notifications, ...newNotifs] }));
-      const settings = data.notificationSettings || DEFAULT_NOTIFICATION_SETTINGS;
-      if (!isQuietHours(settings)) {
-        const critical = newNotifs.filter(n => n.severity === 'critical' || n.severity === 'warning');
-        critical.slice(0, 2).forEach(n => {
-          toast({ title: n.title, description: n.message });
-        });
-      }
+  const runNotificationGeneration = useCallback(async () => {
+    // Trigger server-side generation via heartbeat
+    if (!userId) return;
+    try {
+      const { supabase: sb } = await import('@/integrations/supabase/client');
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session?.access_token) return;
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      await fetch(`${supabaseUrl}/functions/v1/run-jobs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ mode: 'heartbeat' }),
+      });
+      refreshData();
+    } catch (e) {
+      console.warn('Manual notification generation failed:', e);
     }
-  }, [data, update]);
+  }, [userId, refreshData]);
 
   const getUnreadNotificationCount = useCallback((): number => {
     return data.notifications.filter(n => !n.readAt && !n.dismissedAt && (!n.snoozedUntil || n.snoozedUntil <= new Date().toISOString())).length;
   }, [data.notifications]);
 
-  // Generate notifications on load and periodically
-  const lastGenRef = useRef<string>('');
+  // Server-side heartbeat: trigger run-jobs on load and every 5 minutes
+  const heartbeatRef = useRef<string>('');
   useEffect(() => {
-    const key = format(new Date(), 'yyyy-MM-dd-HH');
-    if (lastGenRef.current !== key) {
-      lastGenRef.current = key;
-      const newNotifs = generateNotifications(data);
-      if (newNotifs.length > 0) {
-        setData(prev => ({ ...prev, notifications: [...prev.notifications, ...newNotifs] }));
+    if (!userId) return;
+
+    const runHeartbeat = async () => {
+      const key = format(new Date(), 'yyyy-MM-dd-HH-mm').slice(0, 15); // 5-min bucket
+      if (heartbeatRef.current === key) return;
+      heartbeatRef.current = key;
+
+      try {
+        const { data: { session } } = await (await import('@/integrations/supabase/client')).supabase.auth.getSession();
+        if (!session?.access_token) return;
+
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        await fetch(`${supabaseUrl}/functions/v1/run-jobs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ mode: 'heartbeat' }),
+        });
+
+        // After heartbeat, refresh notifications from DB
+        refreshData();
+      } catch (e) {
+        console.warn('Heartbeat failed:', e);
       }
-    }
-  }, [data.tasks, data.goals, data.habits, data.focusBlocks, data.dailyCheckIns, data.inboxItems]);
+    };
+
+    // Run on mount
+    const timeout = setTimeout(runHeartbeat, 3000);
+    // Then every 5 minutes
+    const interval = setInterval(runHeartbeat, 5 * 60 * 1000);
+    return () => { clearTimeout(timeout); clearInterval(interval); };
+  }, [userId, refreshData]);
 
   // ── Inbox ──
   const addInboxItem = useCallback((content: string, source: InboxItem['source'] = 'manual'): InboxItem => {
@@ -1012,38 +1048,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast({ title: 'Automation undone' });
   }, [update, data.automationLogs]);
 
-  // ── Automation Time Tick ──
-  const lastAutoTickRef = useRef<string>('');
-  useEffect(() => {
-    const tick = () => {
-      const key = format(new Date(), 'yyyy-MM-dd-HH-mm');
-      if (lastAutoTickRef.current === key) return;
-      lastAutoTickRef.current = key;
-
-      setData(prev => {
-        let d = { ...prev };
-        const enabledRules = d.automationRules.filter(r => r.enabled && r.trigger.type === 'time');
-        for (const rule of enabledRules) {
-          if (!shouldRunTimeRule(rule)) continue;
-          if (isThrottled(rule, d.automationLogs)) {
-            d = { ...d, automationLogs: [...d.automationLogs, { id: crypto.randomUUID(), ruleId: rule.id, ranAt: new Date().toISOString(), status: 'throttled', reason: 'Rate limited', createdEntityRefs: [] }] };
-            continue;
-          }
-          if (!evaluateConditions(rule.conditions, d)) {
-            d = { ...d, automationLogs: [...d.automationLogs, { id: crypto.randomUUID(), ruleId: rule.id, ranAt: new Date().toISOString(), status: 'skipped', reason: 'Conditions not met', createdEntityRefs: [] }] };
-            continue;
-          }
-          const { newData, log } = executeActions(rule, d, d.templates);
-          d = { ...newData, automationRules: newData.automationRules.map(r => r.id === rule.id ? { ...r, lastRunAt: new Date().toISOString() } : r), automationLogs: [...newData.automationLogs, log] };
-        }
-        return d;
-      });
-    };
-
-    tick();
-    const interval = setInterval(tick, 60000);
-    return () => clearInterval(interval);
-  }, []);
+  // Client-side automation tick removed — now handled server-side via run-jobs heartbeat
 
   return (
     <AppContext.Provider value={{
