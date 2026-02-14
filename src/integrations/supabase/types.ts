@@ -193,6 +193,33 @@ export type Database = {
           },
         ]
       }
+      copilot_plan_requests: {
+        Row: {
+          created_at: string
+          id: string
+          plan_hash: string
+          request_id: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          plan_hash: string
+          request_id: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          plan_hash?: string
+          request_id?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       copilot_threads: {
         Row: {
           created_at: string

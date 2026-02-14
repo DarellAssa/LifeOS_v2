@@ -314,9 +314,11 @@ export default function InboxPage() {
                       <Button size="sm" variant="outline" onClick={() => { archiveInboxItem(selectedItem.id); setSelectedId(null); }}>
                         <Archive className="h-3 w-3 mr-1" /> Archive
                       </Button>
-                      <Button size="sm" variant="destructive" onClick={() => { deleteInboxItem(selectedItem.id); setSelectedId(null); }}>
-                        <Trash2 className="h-3 w-3 mr-1" /> Delete
-                      </Button>
+                      {selectedItem.status === 'archived' && (
+                        <Button size="sm" variant="outline" onClick={() => { updateInboxItem(selectedItem.id, { status: 'unprocessed' } as any); setSelectedId(null); }}>
+                          <InboxIcon className="h-3 w-3 mr-1" /> Restore
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
