@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 import { useAppContext } from '@/store/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -170,6 +171,9 @@ export default function InboxPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {/* DEV Debug Panel */}
+      {import.meta.env.DEV && <InboxDebugPanel data={data} addInboxItem={addInboxItem} />}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Inbox</h1>
@@ -492,6 +496,66 @@ export default function InboxPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// DEV-only debug panel
+function InboxDebugPanel({ data, addInboxItem }: { data: any; addInboxItem: (content: string) => any }) {
+  const [open, setOpen] = useState(false);
+  const total = data.inboxItems.length;
+  const unprocessed = data.inboxItems.filter((i: any) => i.status === 'unprocessed').length;
+  const archived = data.inboxItems.filter((i: any) => i.status === 'archived').length;
+  const converted = data.inboxItems.filter((i: any) => i.status === 'converted').length;
+  const recent = [...data.inboxItems].sort((a: any, b: any) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
+
+  const createTestItems = () => {
+    const samples = [
+      'Buy groceries for the week',
+      'Call dentist to reschedule appointment tomorrow at 3pm',
+      'Goal: read 12 books by end of year',
+      'Review quarterly report and send feedback',
+      'Daily meditation habit - 10 min each morning',
+    ];
+    samples.forEach(s => addInboxItem(s));
+  };
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="text-[10px] text-muted-foreground hover:text-foreground border border-dashed border-border rounded px-2 py-1">
+        🐛 Debug Panel
+      </button>
+    );
+  }
+
+  return (
+    <div className="border border-dashed border-yellow-500/50 rounded-lg p-3 bg-yellow-500/5 text-xs space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="font-mono font-bold text-yellow-600">🐛 Inbox Debug</span>
+        <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">✕</button>
+      </div>
+      <div className="flex gap-3 font-mono">
+        <span>Total: <b>{total}</b></span>
+        <span>Unprocessed: <b>{unprocessed}</b></span>
+        <span>Archived: <b>{archived}</b></span>
+        <span>Converted: <b>{converted}</b></span>
+      </div>
+      {recent.length > 0 && (
+        <div className="space-y-1">
+          <span className="font-mono text-muted-foreground">Last 5:</span>
+          {recent.map((item: any) => (
+            <div key={item.id} className="font-mono flex gap-2 text-[10px]">
+              <span className="text-muted-foreground">{item.id.slice(0, 8)}</span>
+              <span className="truncate max-w-[200px]">{item.title || item.content.slice(0, 40)}</span>
+              <Badge variant={item.status === 'unprocessed' ? 'default' : 'secondary'} className="text-[8px] h-3.5">{item.status}</Badge>
+              <span className="text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={createTestItems}>
+        + Create 5 test inbox items
+      </Button>
     </div>
   );
 }
