@@ -24,6 +24,7 @@ import {
 export interface TourStep {
   id: string;
   targetSelector: string;
+  targetSelectorFallbacks?: string[];
   title: string;
   body: string;
   placement: 'top' | 'bottom' | 'left' | 'right';
@@ -125,8 +126,8 @@ function checkStepReady(step: TourStep, currentRoute: string): StepReadiness {
     },
   };
 
-  // Route check
-  if (step.route && currentRoute !== step.route) {
+  // Route check (prefix match)
+  if (step.route && currentRoute !== step.route && !currentRoute.startsWith(step.route + '/')) {
     reasons.push('route_mismatch');
     result.ready = false;
   }
@@ -247,7 +248,7 @@ function Arrow({ side, offset }: { side: Placement; offset: number }) {
 }
 
 /* ─── Retry schedule ─── */
-const RETRY_DELAYS = [100, 200, 400, 800, 1200];
+const RETRY_DELAYS = [100, 200, 400, 800, 1200, 1200, 1200, 1200];
 
 /* ─── Debug Panel Component ─── */
 
@@ -278,6 +279,7 @@ function DebugPanel({
         <div>Status: <span className={status === 'showing' ? 'text-green-500' : 'text-yellow-500'}>{status}</span></div>
         <div>Route: expected=<span className="text-foreground">{step.route ?? '(any)'}</span> current=<span className="text-foreground">{readiness?.details.route.current ?? '?'}</span></div>
         <div>Selector: <span className="text-foreground break-all">{step.targetSelector}</span></div>
+        {step.targetSelectorFallbacks && <div>Fallbacks: <span className="text-foreground break-all">{step.targetSelectorFallbacks.join(', ')}</span></div>}
         <div>Found: <span className={readiness?.details.selectorFound ? 'text-green-500' : 'text-red-500'}>{readiness?.details.selectorFound ? 'YES' : 'NO'}</span></div>
         {readiness?.details.computedStyle && (
           <div>Style: display={readiness.details.computedStyle.display} visibility={readiness.details.computedStyle.visibility} opacity={readiness.details.computedStyle.opacity}</div>
@@ -411,8 +413,8 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
     logTourEvent('TARGET_CHECK', currentIndex, location.pathname, step.targetSelector,
       readiness.ready ? 'ready' : readiness.reasons.join(','));
 
-    // Check route first
-    if (step.route && location.pathname !== step.route) {
+    // Check route first (prefix match)
+    if (step.route && location.pathname !== step.route && !location.pathname.startsWith(step.route + '/')) {
       setStatus('navigating');
       setSpotlight(null);
       setTooltipPos(null);
@@ -421,8 +423,18 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
       return;
     }
 
-    // Check element readiness
-    const el = isElementReady(step.targetSelector);
+    // Check element readiness with fallback selectors
+    const allSelectors = [step.targetSelector, ...(step.targetSelectorFallbacks ?? [])];
+    let el: HTMLElement | null = null;
+    let matchedSelector = step.targetSelector;
+    for (const sel of allSelectors) {
+      el = isElementReady(sel);
+      if (el) {
+        matchedSelector = sel;
+        break;
+      }
+    }
+
     if (!el) {
       // Retry with backoff
       if (retryCountRef.current < RETRY_DELAYS.length) {
@@ -430,10 +442,11 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
         const delay = RETRY_DELAYS[retryCountRef.current];
         retryCountRef.current++;
         logTourEvent('TARGET_MISSING', currentIndex, location.pathname, step.targetSelector,
-          `retry ${retryCountRef.current}/${RETRY_DELAYS.length}, delay=${delay}`);
+          `retry ${retryCountRef.current}/${RETRY_DELAYS.length}, delay=${delay}, tried=${allSelectors.length} selectors`);
         retryTimerRef.current = setTimeout(attemptShow, delay);
       } else {
         // Show fallback
+        const readiness = checkStepReady(step, location.pathname);
         logTourEvent('FALLBACK_SHOWN', currentIndex, location.pathname, step.targetSelector,
           readiness.reasons.join(','));
         setFallbackReadiness(readiness);
@@ -447,6 +460,7 @@ export function GuidedTour({ steps }: { steps: TourStep[] }) {
     retryCountRef.current = 0;
     setShowFallback(false);
     setFallbackReadiness(null);
+    logTourEvent('TARGET_CHECK', currentIndex, location.pathname, matchedSelector, `found via ${matchedSelector}`);
     el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
     requestAnimationFrame(() => {

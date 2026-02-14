@@ -138,8 +138,8 @@ export default function SettingsPage() {
   const advancedModules = Object.entries(MODULE_INFO).filter(([, info]) => info.advanced);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+    <div className="max-w-2xl mx-auto space-y-6" data-tour="settings-root">
+      <h1 className="text-2xl font-bold tracking-tight" data-tour="settings-header">Settings</h1>
 
       <Tabs defaultValue="profile">
         <TabsList>
@@ -210,7 +210,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="modules" className="space-y-4 mt-4">
+        <TabsContent value="modules" className="space-y-4 mt-4" data-tour="modules-section">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Modules</CardTitle>
