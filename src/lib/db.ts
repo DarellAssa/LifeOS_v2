@@ -338,6 +338,60 @@ export async function dbInsertAutomationLog(userId: string, log: AutomationRunLo
 export async function dbUpsertPinnedFocus(userId: string, date: string, taskIds: string[]) {
   await supabase.from('pinned_focus').upsert({ user_id: userId, date, task_ids: taskIds as any } as any, { onConflict: 'user_id,date' });
 }
+
+// ── Trash helpers ──
+export type TrashEntityType = 'tasks' | 'goals' | 'calendar_events' | 'focus_blocks' | 'habits' | 'inbox_items' | 'notes' | 'templates' | 'automation_rules';
+
+const TRASH_TABLES: TrashEntityType[] = ['tasks', 'goals', 'calendar_events', 'focus_blocks', 'habits', 'inbox_items', 'notes', 'templates', 'automation_rules'];
+
+export interface TrashedItem {
+  id: string;
+  title: string;
+  deletedAt: string;
+  entityType: TrashEntityType;
+}
+
+function getTitleField(table: TrashEntityType): string {
+  return table === 'automation_rules' ? 'name' : table === 'templates' ? 'name' : 'title';
+}
+
+export async function fetchTrashedItems(userId: string): Promise<TrashedItem[]> {
+  const results = await Promise.all(
+    TRASH_TABLES.map(async (table) => {
+      const titleField = getTitleField(table);
+      const { data } = await supabase
+        .from(table)
+        .select(`id, ${titleField}, deleted_at`)
+        .eq('user_id', userId)
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(100);
+      return (data || []).map((r: any) => ({
+        id: r.id,
+        title: r[titleField] || '(untitled)',
+        deletedAt: r.deleted_at,
+        entityType: table,
+      }));
+    })
+  );
+  return results.flat();
+}
+
+export async function dbRestoreItem(userId: string, table: TrashEntityType, id: string) {
+  await supabase.from(table).update({ deleted_at: null } as any).eq('id', id).eq('user_id', userId);
+}
+
+export async function dbHardDeleteItem(userId: string, table: TrashEntityType, id: string) {
+  await supabase.from(table).delete().eq('id', id).eq('user_id', userId);
+}
+
+export async function dbRestoreAll(userId: string, table: TrashEntityType) {
+  await supabase.from(table).update({ deleted_at: null } as any).eq('user_id', userId).not('deleted_at', 'is', null);
+}
+
+export async function dbEmptyTrash(userId: string, table: TrashEntityType) {
+  await supabase.from(table).delete().eq('user_id', userId).not('deleted_at', 'is', null);
+}
 export async function dbDeleteDemoData(userId: string) {
   await Promise.all([
     supabase.from('tasks').delete().eq('user_id', userId).eq('is_demo', true),
