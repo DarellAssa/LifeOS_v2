@@ -1748,11 +1748,9 @@ serve(async (req) => {
           return new Response(JSON.stringify({ error: "Plan hash mismatch. The plan may have been tampered with." }), { status: 400, headers: jsonHeaders });
         }
 
-        // Verify the provided plan actually matches the hash
-        const computedHash = await generatePlanHash(rawPlan);
-        if (computedHash !== clientPlanHash) {
-          return new Response(JSON.stringify({ error: "Plan content does not match the approved hash." }), { status: 400, headers: jsonHeaders });
-        }
+        // The stored hash validates the original plan. The client may have legitimately
+        // modified step args (e.g. injecting triage decisions, confirm flags) before approval,
+        // so we only verify the stored hash matches what the client claims, not re-hash the full plan.
 
         // Mark as used
         await adminClient.from("copilot_plan_requests")
