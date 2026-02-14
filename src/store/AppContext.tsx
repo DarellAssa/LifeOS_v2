@@ -26,6 +26,7 @@ function emptyData(): AppData {
 
 interface AppContextType {
   data: AppData;
+  refreshData: () => void;
   // Tasks
   addTask: (task: Task) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
@@ -180,6 +181,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       setData(d);
       setLoaded(true);
+    });
+  }, [userId, profile?.first_name, profile?.week_start, profile?.timezone]);
+
+  const refreshData = useCallback(() => {
+    if (!userId) return;
+    fetchAllUserData(userId).then(d => {
+      if (profile?.first_name) d.profile.name = profile.first_name;
+      if (profile?.week_start) d.profile.weekStartDay = profile.week_start === 'sun' ? 'sunday' : 'monday';
+      if (profile?.timezone) d.profile.timezone = profile.timezone;
+      setData(d);
     });
   }, [userId, profile?.first_name, profile?.week_start, profile?.timezone]);
 
@@ -955,7 +966,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      data, addTask, updateTask, deleteTask, toggleTaskDone, changeTaskStatus, scheduleTask, unscheduleTask,
+      data, refreshData, addTask, updateTask, deleteTask, toggleTaskDone, changeTaskStatus, scheduleTask, unscheduleTask,
       addGoal, updateGoal, deleteGoal, archiveGoal, completeGoal,
       linkTaskToGoal, unlinkTaskFromGoal,
       getActiveGoals, getBehindGoals, getGoalsDueSoon, getGoalProgress, getGoalStatus,
