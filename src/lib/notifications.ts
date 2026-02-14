@@ -51,7 +51,7 @@ export function generateNotifications(data: AppData): NotificationItem[] {
 
   // 1) Overdue tasks
   if (settings.enabledTypes.task_overdue) {
-    const overdueTasks = data.tasks.filter(t => t.status !== 'done' && t.dueDate && t.dueDate < todayStr);
+    const overdueTasks = data.tasks.filter(t => t.status !== 'done' && t.status !== 'canceled' && t.dueDate && t.dueDate < todayStr);
     if (overdueTasks.length > 5) {
       tryAdd({
         type: 'task_overdue', title: `You have ${overdueTasks.length} overdue tasks`,
@@ -77,7 +77,7 @@ export function generateNotifications(data: AppData): NotificationItem[] {
   // 2) Due soon tasks
   if (settings.enabledTypes.task_due_soon) {
     const dueSoonEnd = format(addDays(now, settings.dueSoonDays), 'yyyy-MM-dd');
-    const dueSoon = data.tasks.filter(t => t.status !== 'done' && t.dueDate && t.dueDate > todayStr && t.dueDate <= dueSoonEnd);
+    const dueSoon = data.tasks.filter(t => t.status !== 'done' && t.status !== 'canceled' && t.dueDate && t.dueDate > todayStr && t.dueDate <= dueSoonEnd);
     dueSoon.forEach(t => {
       tryAdd({
         type: 'task_due_soon', title: `"${t.title}" due soon`,

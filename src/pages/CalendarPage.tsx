@@ -24,8 +24,16 @@ const categoryEventColors: Record<EventCategory, string> = {
 
 const focusStatusColors: Record<FocusBlockStatus, string> = {
   planned: 'bg-primary/15 border-primary/30 text-primary',
-  completed: 'bg-green-500/15 border-green-500/30 text-green-700 dark:text-green-400',
-  skipped: 'bg-muted border-border text-muted-foreground line-through',
+  done: 'bg-green-500/15 border-green-500/30 text-green-700 dark:text-green-400',
+  missed: 'bg-muted border-border text-muted-foreground line-through',
+  canceled: 'bg-muted/50 border-border text-muted-foreground line-through opacity-60',
+};
+
+const focusStatusLabels: Record<FocusBlockStatus, string> = {
+  planned: 'Planned',
+  done: 'Completed',
+  missed: 'Missed',
+  canceled: 'Canceled',
 };
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00–20:00
@@ -112,7 +120,7 @@ function FocusBlockForm({ onSave, onClose, initial, defaultStart }: {
         <div><Label>Status</Label>
           <Select value={status} onValueChange={v => setStatus(v as FocusBlockStatus)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="planned">Planned</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="skipped">Skipped</SelectItem></SelectContent>
+            <SelectContent><SelectItem value="planned">Planned</SelectItem><SelectItem value="done">Completed</SelectItem><SelectItem value="missed">Missed</SelectItem><SelectItem value="canceled">Canceled</SelectItem></SelectContent>
           </Select>
         </div>
         <div><Label>Link to Task</Label>
@@ -447,7 +455,7 @@ export default function CalendarPage() {
                       <p className="text-sm font-medium truncate">{item.title}</p>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <Badge variant="secondary" className="text-[8px] capitalize">{item.type === 'focus' ? (item.status || 'planned') : (item.category || 'event')}</Badge>
+                      <Badge variant="secondary" className="text-[8px]">{item.type === 'focus' ? (focusStatusLabels[(item.status as FocusBlockStatus) || 'planned'] || item.status) : (item.category || 'event')}</Badge>
                       {item.location && <span className="text-[10px] text-muted-foreground">📍 {item.location}</span>}
                       {taskTitle && <Badge variant="secondary" className="text-[8px]"><CheckSquare className="h-2 w-2 mr-0.5 inline" />{taskTitle}</Badge>}
                       {goalTitle && <Badge variant="secondary" className="text-[8px]"><Target className="h-2 w-2 mr-0.5 inline" />{goalTitle}</Badge>}
@@ -459,7 +467,7 @@ export default function CalendarPage() {
                         <button onClick={e => { e.stopPropagation(); markFocusBlockCompleted(item.id); }} className="text-green-600 hover:text-green-700 p-1" title="Complete">
                           <CheckSquare className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={e => { e.stopPropagation(); markFocusBlockSkipped(item.id); }} className="text-muted-foreground hover:text-foreground p-1" title="Skip">
+                        <button onClick={e => { e.stopPropagation(); markFocusBlockSkipped(item.id); }} className="text-muted-foreground hover:text-foreground p-1" title="Missed">
                           ✕
                         </button>
                       </>
@@ -513,7 +521,7 @@ export default function CalendarPage() {
               {editingBlock && editingBlock.status === 'planned' && (
                 <>
                   <Button size="sm" variant="outline" onClick={() => { markFocusBlockCompleted(editingBlock.id); setDialogOpen(false); }}>Mark Completed</Button>
-                  <Button size="sm" variant="ghost" onClick={() => { markFocusBlockSkipped(editingBlock.id); setDialogOpen(false); }}>Skip</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { markFocusBlockSkipped(editingBlock.id); setDialogOpen(false); }}>Mark Missed</Button>
                 </>
               )}
               <Button size="sm" variant="destructive" className="ml-auto" onClick={() => {

@@ -265,9 +265,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const archiveGoal = useCallback((id: string) => {
-    update(d => ({ ...d, goals: d.goals.map(g => g.id === id ? { ...g, status: 'archived' as const, updatedAt: new Date().toISOString() } : g) }));
-    toast({ title: 'Goal archived' });
-  }, [update]);
+    update(d => ({ ...d, goals: d.goals.map(g => g.id === id ? { ...g, status: 'paused' as const, updatedAt: new Date().toISOString() } : g) }));
+    if (userId) {
+      const goal = data.goals.find(g => g.id === id);
+      if (goal) dbUpsertGoal(userId, { ...goal, status: 'paused', updatedAt: new Date().toISOString() });
+    }
+    toast({ title: 'Goal paused' });
+  }, [update, userId, data.goals]);
 
   const completeGoal = useCallback((id: string) => {
     update(d => ({ ...d, goals: d.goals.map(g => g.id === id ? { ...g, status: 'completed' as const, updatedAt: new Date().toISOString() } : g) }));
@@ -344,14 +348,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const markFocusBlockCompleted = useCallback((id: string) => {
-    update(d => ({ ...d, focusBlocks: d.focusBlocks.map(fb => fb.id === id ? { ...fb, status: 'completed' as const, updatedAt: new Date().toISOString() } : fb) }));
+    update(d => ({ ...d, focusBlocks: d.focusBlocks.map(fb => fb.id === id ? { ...fb, status: 'done' as const, updatedAt: new Date().toISOString() } : fb) }));
+    if (userId) {
+      const fb = data.focusBlocks.find(f => f.id === id);
+      if (fb) dbUpsertFocusBlock(userId, { ...fb, status: 'done', updatedAt: new Date().toISOString() });
+    }
     toast({ title: 'Focus block completed ✓' });
-  }, [update]);
+  }, [update, userId, data.focusBlocks]);
 
   const markFocusBlockSkipped = useCallback((id: string) => {
-    update(d => ({ ...d, focusBlocks: d.focusBlocks.map(fb => fb.id === id ? { ...fb, status: 'skipped' as const, updatedAt: new Date().toISOString() } : fb) }));
-    toast({ title: 'Focus block skipped' });
-  }, [update]);
+    update(d => ({ ...d, focusBlocks: d.focusBlocks.map(fb => fb.id === id ? { ...fb, status: 'missed' as const, updatedAt: new Date().toISOString() } : fb) }));
+    if (userId) {
+      const fb = data.focusBlocks.find(f => f.id === id);
+      if (fb) dbUpsertFocusBlock(userId, { ...fb, status: 'missed', updatedAt: new Date().toISOString() });
+    }
+    toast({ title: 'Focus block missed' });
+  }, [update, userId, data.focusBlocks]);
 
   const createFocusBlockFromTask = useCallback((taskId: string, startDateTime: string, durationMinutes: number) => {
     const task = data.tasks.find(t => t.id === taskId);
@@ -499,12 +511,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Task Selectors ──
   const getTodayTasks = useCallback((): Task[] => {
     const todayStr = format(new Date(), 'yyyy-MM-dd');
-    return data.tasks.filter(t => t.status !== 'done' && ((t.dueDate && t.dueDate === todayStr) || t.status === 'doing'));
+    return data.tasks.filter(t => t.status !== 'done' && t.status !== 'canceled' && ((t.dueDate && t.dueDate === todayStr) || t.status === 'doing'));
   }, [data.tasks]);
 
   const getOverdueTasks = useCallback((): Task[] => {
     const todayStr = format(new Date(), 'yyyy-MM-dd');
-    return data.tasks.filter(t => t.status !== 'done' && t.dueDate && t.dueDate < todayStr);
+    return data.tasks.filter(t => t.status !== 'done' && t.status !== 'canceled' && t.dueDate && t.dueDate < todayStr);
   }, [data.tasks]);
 
   const getThisWeekCommittedTasks = useCallback((): Task[] => {
@@ -573,7 +585,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const getCompletedFocusMinutes = useCallback((startDate: string, endDate: string): number => {
     const s = new Date(startDate); const e = new Date(endDate);
     return data.focusBlocks
-      .filter(fb => fb.status === 'completed' && new Date(fb.startDateTime) >= s && new Date(fb.startDateTime) <= e)
+      .filter(fb => fb.status === 'done' && new Date(fb.startDateTime) >= s && new Date(fb.startDateTime) <= e)
       .reduce((sum, fb) => sum + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
   }, [data.focusBlocks]);
 

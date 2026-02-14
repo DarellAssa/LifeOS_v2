@@ -108,7 +108,7 @@ export default function Analytics() {
   const plannedMins = getPlannedFocusMinutes(rangeStartISO, rangeEndISO);
   const completedMins = getCompletedFocusMinutes(rangeStartISO, rangeEndISO);
   const focusRate = plannedMins > 0 ? Math.round((completedMins / plannedMins) * 100) : 0;
-  const focusBlocksCompleted = data.focusBlocks.filter(fb => fb.status === 'completed' && new Date(fb.startDateTime) >= rangeStart && new Date(fb.startDateTime) <= rangeEnd).length;
+  const focusBlocksCompleted = data.focusBlocks.filter(fb => fb.status === 'done' && new Date(fb.startDateTime) >= rangeStart && new Date(fb.startDateTime) <= rangeEnd).length;
 
   const focusPerDay = useMemo(() => {
     if (range === 'week') {
@@ -118,7 +118,7 @@ export default function Analytics() {
         const dayStr = format(d, 'yyyy-MM-dd');
         const dayBlocks = data.focusBlocks.filter(fb => format(new Date(fb.startDateTime), 'yyyy-MM-dd') === dayStr);
         const planned = dayBlocks.reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
-        const completed = dayBlocks.filter(fb => fb.status === 'completed').reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
+        const completed = dayBlocks.filter(fb => fb.status === 'done').reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
         return { date: format(d, 'EEE'), planned, completed };
       });
     }
@@ -127,7 +127,7 @@ export default function Analytics() {
       const we = addDays(ws, 6);
       const wBlocks = data.focusBlocks.filter(fb => isWithinInterval(new Date(fb.startDateTime), { start: ws, end: we }));
       const planned = wBlocks.reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
-      const completed = wBlocks.filter(fb => fb.status === 'completed').reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
+      const completed = wBlocks.filter(fb => fb.status === 'done').reduce((s, fb) => s + differenceInMinutes(new Date(fb.endDateTime), new Date(fb.startDateTime)), 0);
       return { date: format(ws, 'MMM d'), planned, completed };
     });
   }, [data.focusBlocks, range]);

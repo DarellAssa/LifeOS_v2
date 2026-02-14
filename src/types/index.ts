@@ -1,7 +1,12 @@
 // LifeOS Core Types
 
-export type TaskStatus = 'todo' | 'doing' | 'done';
+export type TaskStatus = 'todo' | 'doing' | 'done' | 'blocked' | 'canceled';
 export type TaskPriority = 'low' | 'med' | 'high';
+
+// Canonical status values matching DB constraints
+export const VALID_TASK_STATUSES: TaskStatus[] = ['todo', 'doing', 'done', 'blocked', 'canceled'];
+export const VALID_GOAL_STATUSES: GoalStatus[] = ['active', 'paused', 'completed', 'canceled'];
+export const VALID_FOCUS_BLOCK_STATUSES: FocusBlockStatus[] = ['planned', 'done', 'missed', 'canceled'];
 
 export interface Subtask {
   id: string;
@@ -34,7 +39,7 @@ export interface Task {
 }
 
 export type GoalCategory = 'health' | 'career' | 'finance' | 'study' | 'personal' | 'custom';
-export type GoalStatus = 'active' | 'completed' | 'archived';
+export type GoalStatus = 'active' | 'paused' | 'completed' | 'canceled';
 export type ProgressType = 'manual' | 'linked';
 export type GoalDisplayStatus = 'Not started' | 'On track' | 'Behind' | 'Overdue' | 'Completed';
 
@@ -77,7 +82,7 @@ export interface CalendarEvent {
   updatedAt?: string;
 }
 
-export type FocusBlockStatus = 'planned' | 'completed' | 'skipped';
+export type FocusBlockStatus = 'planned' | 'done' | 'missed' | 'canceled';
 
 export interface FocusBlock {
   id: string;
