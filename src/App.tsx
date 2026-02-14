@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AppProvider } from "@/store/AppContext";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import Dashboard from "@/pages/Dashboard";
 import Tasks from "@/pages/Tasks";
 import Goals from "@/pages/Goals";
@@ -18,6 +19,7 @@ import InboxPage from "@/pages/InboxPage";
 import SettingsPage from "@/pages/SettingsPage";
 import TemplatesPage from "@/pages/TemplatesPage";
 import AutomationsPage from "@/pages/AutomationsPage";
+import ActivityLogPage from "@/pages/ActivityLogPage";
 import AuthPage from "@/pages/AuthPage";
 import OnboardingPage from "@/pages/OnboardingPage";
 import NotFound from "@/pages/NotFound";
@@ -59,41 +61,44 @@ function AuthRoute() {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/auth" element={<AuthRoute />} />
-            <Route path="/onboarding" element={<OnboardingRoute />} />
-            <Route element={
-              <ProtectedRoute>
-                <AppProvider>
-                  <AppLayout />
-                </AppProvider>
-              </ProtectedRoute>
-            }>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/tasks" element={<Tasks />} />
-              <Route path="/goals" element={<Goals />} />
-              <Route path="/calendar" element={<CalendarPage />} />
-              <Route path="/habits" element={<Habits />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/planning" element={<Planning />} />
-              <Route path="/inbox" element={<InboxPage />} />
-              <Route path="/notifications" element={<Notifications />} />
-              <Route path="/templates" element={<TemplatesPage />} />
-              <Route path="/automations" element={<AutomationsPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <GlobalErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AuthProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/auth" element={<AuthRoute />} />
+              <Route path="/onboarding" element={<OnboardingRoute />} />
+              <Route element={
+                <ProtectedRoute>
+                  <AppProvider>
+                    <AppLayout />
+                  </AppProvider>
+                </ProtectedRoute>
+              }>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/tasks" element={<Tasks />} />
+                <Route path="/goals" element={<Goals />} />
+                <Route path="/calendar" element={<CalendarPage />} />
+                <Route path="/habits" element={<Habits />} />
+                <Route path="/analytics" element={<Analytics />} />
+                <Route path="/planning" element={<Planning />} />
+                <Route path="/inbox" element={<InboxPage />} />
+                <Route path="/notifications" element={<Notifications />} />
+                <Route path="/templates" element={<TemplatesPage />} />
+                <Route path="/automations" element={<AutomationsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/activity" element={<ActivityLogPage />} />
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </GlobalErrorBoundary>
 );
 
 export default App;

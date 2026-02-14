@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          action: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json | null
+          source: string
+          title: string | null
+          ts: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+          source: string
+          title?: string | null
+          ts?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+          source?: string
+          title?: string | null
+          ts?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       automation_rules: {
         Row: {
           actions: Json | null

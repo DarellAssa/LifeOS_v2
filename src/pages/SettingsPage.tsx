@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Download, Upload, Trash2, CalendarDays, ExternalLink, Bell, ChevronDown, RotateCcw, Eye, Sparkles, Search, Loader2, Settings2 } from 'lucide-react';
+import { Download, Upload, Trash2, CalendarDays, ExternalLink, Bell, ChevronDown, RotateCcw, Eye, Sparkles, Search, Loader2, Settings2, Bug } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { NotificationType } from '@/types';
 import { resetTourForUser, isTourDebugEnabled, setTourDebugEnabled } from '@/components/GuidedTour';
@@ -430,6 +430,26 @@ export default function SettingsPage() {
                 <div><p className="font-medium">🔔 Notifications</p><p className="text-muted-foreground">In-app alerts for overdue tasks, behind goals, and more.</p></div>
                 <div><p className="font-medium">📊 Analytics</p><p className="text-muted-foreground">View trends and patterns across all your data.</p></div>
                 <div><p className="font-medium">⌘K Command Palette</p><p className="text-muted-foreground">Press ⌘K to quickly navigate or create items.</p></div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Debug mode */}
+          <Card>
+            <CardHeader><CardTitle className="text-base flex items-center gap-2"><Bug className="h-4 w-4" /> Developer</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm">Debug mode</Label>
+                  <p className="text-[11px] text-muted-foreground">Show technical details in error screens and activity logs</p>
+                </div>
+                <Switch
+                  checked={typeof window !== 'undefined' && localStorage.getItem('lifeos-debug') === 'true'}
+                  onCheckedChange={v => {
+                    localStorage.setItem('lifeos-debug', v ? 'true' : 'false');
+                    toast({ title: v ? 'Debug mode enabled' : 'Debug mode disabled' });
+                  }}
+                />
               </div>
             </CardContent>
           </Card>

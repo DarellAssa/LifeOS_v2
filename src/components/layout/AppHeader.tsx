@@ -8,6 +8,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
+import { SyncIndicator } from '@/components/SyncIndicator';
+import { useSyncStatus } from '@/hooks/useSyncStatus';
 
 interface AppHeaderProps {
   onOpenSearch: () => void;
@@ -24,6 +26,7 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
   const [profileOpen, setProfileOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+  const { failedOps, retryOp, retryAll, dismissOp, dismissAll } = useSyncStatus();
 
   const unreadCount = getUnreadNotificationCount();
 
@@ -103,6 +106,14 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
           </div>
         )}
       </div>
+
+      <SyncIndicator
+        failedOps={failedOps}
+        onRetry={retryOp}
+        onRetryAll={retryAll}
+        onDismiss={dismissOp}
+        onDismissAll={dismissAll}
+      />
 
       {isModuleEnabled('copilot') && (
         <Button variant="ghost" size="icon" onClick={onOpenCopilot} className="shrink-0" title="Open Copilot (Ctrl+J)">
