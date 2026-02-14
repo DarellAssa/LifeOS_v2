@@ -139,7 +139,9 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6" data-tour="settings-root">
-      <h1 className="text-2xl font-bold tracking-tight" data-tour="settings-header">Settings</h1>
+      <div className="min-h-[56px] flex items-center" data-tour="settings-header">
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+      </div>
 
       <Tabs defaultValue="profile">
         <TabsList>
