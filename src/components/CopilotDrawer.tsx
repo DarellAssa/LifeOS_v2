@@ -12,6 +12,8 @@ import {
   Inbox, ArrowRight, FileText, Target, Archive,
 } from 'lucide-react';
 import { useAppContext } from '@/store/AppContext';
+import { useAuth } from '@/hooks/useAuth';
+import { mergePreferences } from '@/types/preferences';
 import {
   CopilotMessage, CopilotThread, CopilotPlan, PendingConfirmation, ToolRun,
   CopilotMode, ScheduleOperation, ScheduleConflict, TriageItem, TriageDecision,
@@ -266,6 +268,8 @@ function PlanPreviewCard({
   executionResult,
   triageDecisions,
   onTriageDecisionsChange,
+  defaultShowTools = false,
+  defaultExpanded = false,
 }: {
   plan: CopilotPlan;
   onApprove: () => void;
@@ -275,8 +279,10 @@ function PlanPreviewCard({
   executionResult?: { summary: string; toolRuns: ToolRun[] } | null;
   triageDecisions?: TriageDecision[];
   onTriageDecisionsChange?: (decisions: TriageDecision[]) => void;
+  defaultShowTools?: boolean;
+  defaultExpanded?: boolean;
 }) {
-  const [showTools, setShowTools] = useState(false);
+  const [showTools, setShowTools] = useState(defaultShowTools);
   const isApproved = plan.approved === true;
   const isCancelled = plan.approved === false;
   const isPending = plan.approved === undefined;
@@ -420,6 +426,8 @@ function PlanPreviewCard({
 
 export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDrawerProps) {
   const ctx = useAppContext();
+  const { profile } = useAuth();
+  const userPrefs = mergePreferences(profile?.preferences);
   const [threads, setThreads] = useState<CopilotThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
@@ -428,7 +436,7 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
   const [error, setError] = useState<string | null>(null);
   const [errorDebug, setErrorDebug] = useState<{ requestId?: string; status?: number; response?: string; route?: string } | null>(null);
   const [showThreadList, setShowThreadList] = useState(false);
-  const [mode, setMode] = useState<CopilotMode>('chat');
+  const [mode, setMode] = useState<CopilotMode>(userPrefs.copilot.default_mode === 'plan_do' ? 'plan_do' : 'chat');
   const [executionResults, setExecutionResults] = useState<Map<number, { summary: string; toolRuns: ToolRun[] }>>(new Map());
   const [triageDecisionsMap, setTriageDecisionsMap] = useState<Map<number, TriageDecision[]>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
@@ -554,10 +562,10 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
         const msgIndex = messages.length + 1; // +1 for user msg already added
         // Initialize triage decisions from plan's triage_items
         if (plan.triage_items && plan.triage_items.length > 0) {
-          // Default: only include HIGH confidence items as active; MED/LOW default to 'leave'
+          const includesMed = userPrefs.triage.default_confidence === 'high_med';
           const initialDecisions: TriageDecision[] = plan.triage_items.map(item => ({
             item_id: item.item_id,
-            action: item.confidence === 'high' ? item.suggested_action : 'leave',
+            action: (item.confidence === 'high' || (includesMed && item.confidence === 'med')) ? item.suggested_action : 'leave',
             fields: { title: item.suggested.title, ...( item.suggested.due_date ? { due_date: item.suggested.due_date } : {}), ...(item.suggested.priority ? { priority: item.suggested.priority } : {}), ...(item.suggested.tags?.length ? { tags: item.suggested.tags } : {}) },
           }));
           setTriageDecisionsMap(prev => new Map(prev).set(msgIndex, initialDecisions));
@@ -888,6 +896,8 @@ export function CopilotDrawer({ open, onOpenChange, initialMessage }: CopilotDra
                       executionResult={executionResults.get(i)}
                       triageDecisions={triageDecisionsMap.get(i)}
                       onTriageDecisionsChange={(decisions) => setTriageDecisionsMap(prev => new Map(prev).set(i, decisions))}
+                      defaultShowTools={userPrefs.copilot.show_tool_details}
+                      defaultExpanded={userPrefs.copilot.confirm_level === 'strict'}
                     />
                   )}
 
