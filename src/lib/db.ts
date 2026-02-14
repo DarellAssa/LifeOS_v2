@@ -11,6 +11,7 @@ export async function fetchAllUserData(userId: string): Promise<AppData> {
     { data: events },
     { data: focusBlocks },
     { data: habits },
+    { data: habitLogs },
     { data: checkins },
     { data: scores },
     { data: plans },
@@ -28,6 +29,7 @@ export async function fetchAllUserData(userId: string): Promise<AppData> {
     supabase.from('calendar_events').select('*').eq('user_id', userId).is('deleted_at', null),
     supabase.from('focus_blocks').select('*').eq('user_id', userId).is('deleted_at', null),
     supabase.from('habits').select('*').eq('user_id', userId).is('deleted_at', null),
+    supabase.from('habit_logs').select('*').eq('user_id', userId),
     supabase.from('daily_checkins').select('*').eq('user_id', userId),
     supabase.from('life_score_snapshots').select('*').eq('user_id', userId),
     supabase.from('weekly_plans').select('*').eq('user_id', userId),
@@ -43,6 +45,16 @@ export async function fetchAllUserData(userId: string): Promise<AppData> {
 
   const pinnedFocus: Record<string, string[]> = {};
   (pinnedRows || []).forEach((r: any) => { pinnedFocus[r.date] = r.task_ids || []; });
+
+  // Build habit logs lookup: habitId -> sorted date strings
+  const habitLogsByHabit: Record<string, string[]> = {};
+  (habitLogs || []).forEach((hl: any) => {
+    const hid = hl.habit_id;
+    if (!habitLogsByHabit[hid]) habitLogsByHabit[hid] = [];
+    habitLogsByHabit[hid].push(hl.logged_on);
+  });
+  // Sort each habit's logs
+  Object.values(habitLogsByHabit).forEach(arr => arr.sort());
 
   const ns = notifSettings as any;
   const notificationSettings: NotificationSettings = ns ? {
@@ -64,7 +76,7 @@ export async function fetchAllUserData(userId: string): Promise<AppData> {
     goals: (goals || []).map(dbToGoal),
     events: (events || []).map(dbToEvent),
     focusBlocks: (focusBlocks || []).map(dbToFocusBlock),
-    habits: (habits || []).map(dbToHabit),
+    habits: (habits || []).map(r => dbToHabit(r, habitLogsByHabit)),
     dailyCheckIns: (checkins || []).map(dbToCheckIn),
     lifeScoreSnapshots: (scores || []).map(dbToScore),
     weeklyPlans: (plans || []).map(dbToPlan),
@@ -110,10 +122,12 @@ function dbToFocusBlock(r: any): FocusBlock {
     notes: r.notes, createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
-function dbToHabit(r: any): Habit {
+function dbToHabit(r: any, habitLogsByHabit?: Record<string, string[]>): Habit {
+  // Use habit_logs table as source of truth for logs; fall back to habits.logs JSONB for backwards compat
+  const logs = habitLogsByHabit?.[r.id] ?? (r.logs || []);
   return {
     id: r.id, title: r.title, description: r.description, frequency: r.frequency,
-    targetCountPerPeriod: r.target_count_per_period, category: r.category, logs: r.logs || [],
+    targetCountPerPeriod: r.target_count_per_period, category: r.category, logs,
     createdAt: r.created_at, updatedAt: r.updated_at, status: r.status,
   };
 }
@@ -220,11 +234,21 @@ export async function dbUpsertHabit(userId: string, habit: Habit) {
   await supabase.from('habits').upsert({
     id: habit.id, user_id: userId, title: habit.title, description: habit.description,
     frequency: habit.frequency, target_count_per_period: habit.targetCountPerPeriod,
-    category: habit.category, logs: habit.logs as any, status: habit.status,
+    category: habit.category, status: habit.status,
+    // No longer writing logs to habits.logs — habit_logs table is source of truth
   } as any);
 }
 export async function dbDeleteHabit(userId: string, id: string) {
   await supabase.from('habits').update({ deleted_at: new Date().toISOString() } as any).eq('id', id).eq('user_id', userId);
+}
+// ── Habit Logs (normalized table) ──
+export async function dbUpsertHabitLog(userId: string, habitId: string, date: string) {
+  await supabase.from('habit_logs').upsert({
+    user_id: userId, habit_id: habitId, logged_on: date, count: 1,
+  } as any, { onConflict: 'user_id,habit_id,logged_on' });
+}
+export async function dbDeleteHabitLog(userId: string, habitId: string, date: string) {
+  await supabase.from('habit_logs').delete().eq('user_id', userId).eq('habit_id', habitId).eq('logged_on', date);
 }
 export async function dbUpsertCheckIn(userId: string, ci: DailyCheckIn) {
   await supabase.from('daily_checkins').upsert({

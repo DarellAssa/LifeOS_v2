@@ -7,7 +7,7 @@ import { computeGoalProgress, getGoalDisplayStatus, getGoalsDueSoon as getGoalsD
 import { generateNotifications, isQuietHours } from '@/lib/notifications';
 import { detectInboxContent, deriveTitle } from '@/lib/inbox';
 import { useAuth } from '@/hooks/useAuth';
-import { fetchAllUserData, dbUpsertTask, dbDeleteTask, dbUpsertGoal, dbDeleteGoal, dbUpsertEvent, dbDeleteEvent, dbUpsertFocusBlock, dbDeleteFocusBlock, dbUpsertHabit, dbDeleteHabit, dbUpsertCheckIn, dbDeleteCheckIn, dbUpsertScore, dbUpsertWeeklyPlan, dbUpsertNotification, dbUpdateNotification, dbUpsertNotificationSettings, dbUpsertInboxItem, dbDeleteInboxItem, dbUpsertNote, dbDeleteNote, dbUpsertTemplate, dbDeleteTemplate, dbUpsertAutomationRule, dbDeleteAutomationRule, dbInsertAutomationLog, dbUpsertPinnedFocus } from '@/lib/db';
+import { fetchAllUserData, dbUpsertTask, dbDeleteTask, dbUpsertGoal, dbDeleteGoal, dbUpsertEvent, dbDeleteEvent, dbUpsertFocusBlock, dbDeleteFocusBlock, dbUpsertHabit, dbDeleteHabit, dbUpsertHabitLog, dbDeleteHabitLog, dbUpsertCheckIn, dbDeleteCheckIn, dbUpsertScore, dbUpsertWeeklyPlan, dbUpsertNotification, dbUpdateNotification, dbUpsertNotificationSettings, dbUpsertInboxItem, dbDeleteInboxItem, dbUpsertNote, dbDeleteNote, dbUpsertTemplate, dbDeleteTemplate, dbUpsertAutomationRule, dbDeleteAutomationRule, dbInsertAutomationLog, dbUpsertPinnedFocus } from '@/lib/db';
 
 const SCHEMA_VERSION = 9;
 
@@ -397,18 +397,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [update]);
   const logHabit = useCallback((id: string, date: string) => {
     update(d => ({ ...d, habits: d.habits.map(h => h.id === id ? { ...h, logs: h.logs.includes(date) ? h.logs : [...h.logs, date], updatedAt: new Date().toISOString() } : h) }));
+    if (userId) dbUpsertHabitLog(userId, id, date);
     toast({ title: 'Habit logged ✓' });
-  }, [update]);
+  }, [update, userId]);
   const toggleHabitLog = useCallback((id: string, date: string) => {
+    let removing = false;
     update(d => ({
       ...d,
       habits: d.habits.map(h => {
         if (h.id !== id) return h;
-        const logs = h.logs.includes(date) ? h.logs.filter(l => l !== date) : [...h.logs, date];
+        removing = h.logs.includes(date);
+        const logs = removing ? h.logs.filter(l => l !== date) : [...h.logs, date];
         return { ...h, logs, updatedAt: new Date().toISOString() };
       }),
     }));
-  }, [update]);
+    if (userId) {
+      if (removing) dbDeleteHabitLog(userId, id, date);
+      else dbUpsertHabitLog(userId, id, date);
+    }
+  }, [update, userId]);
 
   // ── Daily Check-ins ──
   const upsertDailyCheckIn = useCallback((dateISO: string, payload: Omit<DailyCheckIn, 'id' | 'date' | 'createdAt' | 'updatedAt'>) => {
