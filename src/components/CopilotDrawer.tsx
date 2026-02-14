@@ -341,8 +341,11 @@ function PlanPreviewCard({
         {plan.overall_impact.updates > 0 && (
           <span className="text-amber-600 dark:text-amber-400">~{plan.overall_impact.updates} update{plan.overall_impact.updates > 1 ? 's' : ''}</span>
         )}
+        {(plan.overall_impact.archives || 0) > 0 && (
+          <span className="text-muted-foreground">📦 {plan.overall_impact.archives} archive{plan.overall_impact.archives > 1 ? 's' : ''}</span>
+        )}
         {plan.overall_impact.deletes > 0 && (
-          <span className="text-destructive">-{plan.overall_impact.deletes} delete{plan.overall_impact.deletes > 1 ? 's' : ''}</span>
+          <span className="text-destructive">⚠️ {plan.overall_impact.deletes} delete{plan.overall_impact.deletes > 1 ? 's' : ''} (destructive)</span>
         )}
       </div>
 

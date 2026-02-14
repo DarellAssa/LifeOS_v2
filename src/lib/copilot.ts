@@ -41,7 +41,7 @@ export interface PlanStep {
   tool: string;
   args: Record<string, unknown>;
   requires_confirmation: boolean;
-  expected_impact: { creates: number; updates: number; deletes: number };
+  expected_impact: { creates: number; updates: number; archives: number; deletes: number };
 }
 
 export interface ScheduleOperation {
@@ -95,7 +95,7 @@ export interface CopilotPlan {
   title: string;
   goal: string;
   steps: PlanStep[];
-  overall_impact: { creates: number; updates: number; deletes: number };
+  overall_impact: { creates: number; updates: number; archives: number; deletes: number };
   assumptions: string[];
   questions: string[];
   schedule_operations?: ScheduleOperation[] | null;
