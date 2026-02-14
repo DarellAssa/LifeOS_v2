@@ -797,6 +797,39 @@ export type Database = {
         }
         Relationships: []
       }
+      search_index: {
+        Row: {
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json | null
+          search_text: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          entity_id: string
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+          search_text?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+          search_text?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           completed_at: string | null
@@ -946,7 +979,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      search_entities: {
+        Args: {
+          p_limit?: number
+          p_query: string
+          p_types?: string[]
+          p_user_id: string
+        }
+        Returns: {
+          entity_id: string
+          entity_type: string
+          metadata: Json
+          score: number
+          snippet: string
+          title: string
+        }[]
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never

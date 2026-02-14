@@ -10,13 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Download, Upload, Trash2, CalendarDays, ExternalLink, Bell, ChevronDown, RotateCcw, Eye, Sparkles } from 'lucide-react';
+import { Download, Upload, Trash2, CalendarDays, ExternalLink, Bell, ChevronDown, RotateCcw, Eye, Sparkles, Search, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { NotificationType } from '@/types';
 import { resetTourForUser, isTourDebugEnabled, setTourDebugEnabled } from '@/components/GuidedTour';
 import { dbDeleteDemoData } from '@/lib/db';
 import { useNavigate } from 'react-router-dom';
 import TrashSection from '@/components/TrashSection';
+import { supabase } from '@/integrations/supabase/client';
 
 const NOTIF_TYPE_LABELS: Record<NotificationType, string> = {
   task_overdue: 'Overdue tasks',
@@ -59,6 +60,8 @@ export default function SettingsPage() {
   const [integrationModal, setIntegrationModal] = useState<string | null>(null);
   const [advancedModulesOpen, setAdvancedModulesOpen] = useState(false);
   const [tourDebug, setTourDebug] = useState(isTourDebugEnabled());
+  const [indexing, setIndexing] = useState(false);
+  const [indexResult, setIndexResult] = useState<{ totalIndexed: number; progress: Record<string, number> } | null>(null);
   const settings = data.notificationSettings;
 
   const modules = profile?.modules || DEFAULT_MODULES;
@@ -133,6 +136,21 @@ export default function SettingsPage() {
       createdAt: new Date().toISOString(),
     });
     toast({ title: 'Test notification created' });
+  };
+
+  const handleRebuildSearchIndex = async () => {
+    setIndexing(true);
+    setIndexResult(null);
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke('search-index', { body: {} });
+      if (fnError) throw fnError;
+      setIndexResult({ totalIndexed: fnData.totalIndexed, progress: fnData.progress });
+      toast({ title: 'Search index rebuilt', description: `${fnData.totalIndexed} items indexed.` });
+    } catch (err: any) {
+      toast({ title: 'Indexing failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setIndexing(false);
+    }
   };
 
   const coreModules = Object.entries(MODULE_INFO).filter(([, info]) => !info.advanced);
@@ -329,6 +347,31 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="data" className="space-y-4 mt-4">
+          {/* Search Index */}
+          <Card>
+            <CardHeader><CardTitle className="text-base flex items-center gap-2"><Search className="h-4 w-4" /> Search Index</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">Rebuild the search index to enable fuzzy/semantic search across all your data in Copilot.</p>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={handleRebuildSearchIndex}
+                disabled={indexing}
+              >
+                {indexing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                {indexing ? 'Indexing...' : 'Rebuild search index'}
+              </Button>
+              {indexResult && (
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  <p className="font-medium text-foreground">{indexResult.totalIndexed} items indexed</p>
+                  {Object.entries(indexResult.progress).map(([type, count]) => (
+                    <p key={type}>• {type}: {count}</p>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader><CardTitle className="text-base">Export & Import</CardTitle></CardHeader>
             <CardContent className="space-y-3">

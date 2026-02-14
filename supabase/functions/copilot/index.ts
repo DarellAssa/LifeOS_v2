@@ -295,12 +295,94 @@ async function executeSearch(
   userId: string,
   args: { query?: string; types?: string[]; limit?: number; filters?: { status?: string; priority?: string } }
 ): Promise<ToolExecResult> {
-  const query = (args.query || "").toLowerCase();
+  const query = (args.query || "").trim();
   const types = args.types || [];
   const limit = args.limit || 10;
   const filters = args.filters || {};
   const results: Record<string, unknown>[] = [];
   const dataUsed: string[] = [];
+
+  // Map copilot types to search_index entity_types
+  const typeMap: Record<string, string> = {
+    tasks: "task", goals: "goal", events: "event", habits: "habit",
+    inbox: "inbox", notes: "note", focusBlocks: "focus",
+  };
+  const searchTypes = types.length > 0
+    ? types.map(t => typeMap[t]).filter(Boolean)
+    : null;
+
+  if (query) {
+    // Try semantic search via the search_entities DB function (pg_trgm)
+    try {
+      // First try to use query expansion via the semantic-search edge function
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+
+      // Expand query using chat model for better fuzzy matching
+      let expandedTerms = [query];
+      if (lovableKey) {
+        try {
+          const expandResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash-lite",
+              messages: [
+                { role: "system", content: "You expand search queries for a personal productivity app. Given a query, return a JSON array of 2-4 alternative search terms. Only output the JSON array." },
+                { role: "user", content: query },
+              ],
+              max_tokens: 150, temperature: 0.2,
+            }),
+          });
+          if (expandResp.ok) {
+            const expandData = await expandResp.json();
+            const content = expandData.choices?.[0]?.message?.content || "";
+            const match = content.match(/\[[\s\S]*?\]/);
+            if (match) {
+              const terms = JSON.parse(match[0]) as string[];
+              expandedTerms = [query, ...terms.slice(0, 4)];
+            }
+          }
+        } catch { /* fallback to original query */ }
+      }
+
+      // Search with each term
+      const resultMap = new Map<string, any>();
+      for (const term of expandedTerms) {
+        const { data: searchResults } = await supabase.rpc("search_entities", {
+          p_user_id: userId,
+          p_query: term,
+          p_types: searchTypes,
+          p_limit: limit,
+        });
+        for (const r of (searchResults || [])) {
+          const key = `${r.entity_type}:${r.entity_id}`;
+          if (!resultMap.has(key)) {
+            resultMap.set(key, r);
+          }
+        }
+      }
+
+      const semanticResults = Array.from(resultMap.values())
+        .sort((a: any, b: any) => b.score - a.score)
+        .slice(0, limit);
+
+      if (semanticResults.length > 0) {
+        results.push(...semanticResults.map((r: any) => ({
+          kind: r.entity_type, id: r.entity_id, title: r.title,
+          summary: r.snippet,
+          metadata: r.metadata,
+          score: r.score,
+        })));
+        dataUsed.push(`${semanticResults.length} results via semantic search`);
+        return { output: { results, count: results.length }, actionsTaken: [], dataUsed };
+      }
+    } catch (err) {
+      console.warn("Semantic search failed, falling back to keyword search:", err);
+    }
+  }
+
+  // Fallback: keyword search (original implementation)
   const today = new Date().toISOString().slice(0, 10);
 
   if (types.includes("tasks")) {
