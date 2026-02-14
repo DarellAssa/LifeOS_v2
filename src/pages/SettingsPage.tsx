@@ -351,7 +351,7 @@ export default function SettingsPage() {
           <Card>
             <CardHeader><CardTitle className="text-base flex items-center gap-2"><Search className="h-4 w-4" /> Search Index</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">Rebuild the search index to enable fuzzy/semantic search across all your data in Copilot.</p>
+              <p className="text-xs text-muted-foreground">The search index updates automatically when you create or edit items. Use this button to backfill existing data or rebuild from scratch.</p>
               <Button
                 variant="outline"
                 className="w-full justify-start"

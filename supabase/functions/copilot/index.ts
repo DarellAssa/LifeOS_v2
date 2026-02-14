@@ -7,46 +7,291 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Route mapping (shared constant) ──
+const ROUTE_MAP: Record<string, string> = {
+  task: "/tasks", goal: "/goals", note: "/notes",
+  inbox: "/inbox", event: "/calendar", focus: "/calendar", habit: "/habits",
+};
+
+// ── Shared expansion prompt (same as semantic-search) ──
+const EXPANSION_SYSTEM_PROMPT = `You are a search query expander for a personal productivity app (tasks, goals, events, habits, notes, inbox items, focus blocks).
+Given a user's search query, output a JSON array of 3-5 alternative search terms including synonyms, related words, and rephrased versions.
+Output ONLY a JSON array of strings, nothing else.
+Example: ["workout", "exercise", "gym", "fitness"]`;
+
+async function expandQuery(apiKey: string, originalQuery: string): Promise<string[]> {
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [
+          { role: "system", content: EXPANSION_SYSTEM_PROMPT },
+          { role: "user", content: originalQuery },
+        ],
+        max_tokens: 200, temperature: 0.3,
+      }),
+    });
+    if (!resp.ok) return [originalQuery];
+    const data = await resp.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const match = content.match(/\[[\s\S]*?\]/);
+    if (match) {
+      const terms = JSON.parse(match[0]) as string[];
+      return [originalQuery, ...terms.slice(0, 5)];
+    }
+    return [originalQuery];
+  } catch { return [originalQuery]; }
+}
+
+interface SearchResult {
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  snippet: string;
+  score: number;
+  metadata: Record<string, unknown>;
+  route: string;
+  matched_terms: string[];
+}
+
+async function performSearch(
+  supabase: ReturnType<typeof createClient>,
+  userId: string, query: string,
+  kinds: string[] | null, limit: number, apiKey?: string,
+): Promise<{ results: SearchResult[]; expanded: string[] }> {
+  if (!query || query.trim().length === 0) return { results: [], expanded: [] };
+  const trimmed = query.trim();
+  const expandedTerms = apiKey ? await expandQuery(apiKey, trimmed) : [trimmed];
+  const resultMap = new Map<string, SearchResult>();
+
+  for (const term of expandedTerms) {
+    const { data: searchResults, error } = await supabase.rpc("search_entities", {
+      p_user_id: userId, p_query: term,
+      p_types: kinds && kinds.length > 0 ? kinds : null, p_limit: limit,
+    });
+    if (error) { console.error("Search error:", term, error); continue; }
+    for (const r of (searchResults || [])) {
+      const key = `${r.entity_type}:${r.entity_id}`;
+      if (!resultMap.has(key)) {
+        resultMap.set(key, {
+          entity_type: r.entity_type, entity_id: r.entity_id, title: r.title,
+          snippet: r.snippet, score: r.score, metadata: r.metadata || {},
+          route: ROUTE_MAP[r.entity_type] || "/", matched_terms: [term],
+        });
+      } else {
+        const ex = resultMap.get(key)!;
+        ex.score = Math.max(ex.score, r.score);
+        ex.matched_terms.push(term);
+      }
+    }
+  }
+
+  const results = Array.from(resultMap.values())
+    .sort((a, b) => (b.matched_terms.length - a.matched_terms.length) || (b.score - a.score))
+    .slice(0, limit);
+  return { results, expanded: expandedTerms };
+}
+
+// ── Intent Extractor ──
+interface Intent {
+  goal: string;
+  entity_types: string[];
+  time_hint: string;
+  needs_followup: boolean;
+  followup_question: string | null;
+}
+
+async function extractIntent(apiKey: string, userMessage: string): Promise<Intent> {
+  const defaultIntent: Intent = {
+    goal: "find", entity_types: ["task", "goal", "inbox", "note"],
+    time_hint: "none", needs_followup: false, followup_question: null,
+  };
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [
+          {
+            role: "system",
+            content: `You extract user intent from messages sent to a personal productivity assistant.
+Output STRICT JSON matching this schema:
+{
+  "goal": "find|plan|schedule|summarize|triage|update",
+  "entity_types": ["task","goal","note","inbox","event","focus","habit"],
+  "time_hint": "today|tomorrow|this_week|next_week|range|none",
+  "needs_followup": boolean,
+  "followup_question": string|null
+}
+Rules:
+- If about scheduling/time, include entity_types ["event","focus","task"] and a time_hint.
+- If about finding/searching, include relevant entity_types.
+- If vague, use ["task","goal","inbox","note"] and time_hint "none".
+- If the user's request needs clarification to act, set needs_followup=true and suggest a question.
+Output ONLY the JSON object, nothing else.`,
+          },
+          { role: "user", content: userMessage },
+        ],
+        max_tokens: 300, temperature: 0.1,
+      }),
+    });
+    if (!resp.ok) return defaultIntent;
+    const data = await resp.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const match = content.match(/\{[\s\S]*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      return {
+        goal: parsed.goal || defaultIntent.goal,
+        entity_types: Array.isArray(parsed.entity_types) ? parsed.entity_types : defaultIntent.entity_types,
+        time_hint: parsed.time_hint || "none",
+        needs_followup: !!parsed.needs_followup,
+        followup_question: parsed.followup_question || null,
+      };
+    }
+    return defaultIntent;
+  } catch (err) {
+    console.warn("Intent extraction failed:", err);
+    return defaultIntent;
+  }
+}
+
+// ── Time hint filtering ──
+function getTimeWindow(hint: string): { start: string; end: string } | null {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const tomorrow = new Date(now.getTime() + 86400000);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+  switch (hint) {
+    case "today":
+      return { start: todayStr, end: todayStr };
+    case "tomorrow":
+      return { start: tomorrowStr, end: tomorrowStr };
+    case "this_week": {
+      const endOfWeek = new Date(now.getTime() + (7 - now.getDay()) * 86400000);
+      return { start: todayStr, end: endOfWeek.toISOString().slice(0, 10) };
+    }
+    case "next_week": {
+      const startNext = new Date(now.getTime() + (8 - now.getDay()) * 86400000);
+      const endNext = new Date(startNext.getTime() + 6 * 86400000);
+      return { start: startNext.toISOString().slice(0, 10), end: endNext.toISOString().slice(0, 10) };
+    }
+    default: return null;
+  }
+}
+
+function filterByTimeHint(results: SearchResult[], hint: string): SearchResult[] {
+  const window = getTimeWindow(hint);
+  if (!window) return results;
+
+  const filtered = results.filter(r => {
+    const meta = r.metadata as any;
+    // Check due_date for tasks
+    if (r.entity_type === "task" && meta?.dueDate) {
+      return meta.dueDate >= window.start && meta.dueDate <= window.end;
+    }
+    // Check start for events/focus
+    if ((r.entity_type === "event" || r.entity_type === "focus") && meta?.start) {
+      const startDate = (meta.start as string).slice(0, 10);
+      return startDate >= window.start && startDate <= window.end;
+    }
+    return false;
+  });
+
+  // If filtering yields 0, fall back to unfiltered
+  return filtered.length > 0 ? filtered : results;
+}
+
+// ── Retrieval-driven context builder ──
+async function buildRetrievalContext(
+  supabase: ReturnType<typeof createClient>,
+  userId: string, userMessage: string, apiKey: string,
+  clientContext?: { timezone?: string; weekStart?: string },
+): Promise<{ contextJson: string; intent: Intent }> {
+  // 1. Extract intent
+  const intent = await extractIntent(apiKey, userMessage);
+  console.log("Intent:", JSON.stringify(intent));
+
+  // 2. Retrieve via unified search
+  const { results } = await performSearch(
+    supabase, userId, userMessage, intent.entity_types, 12, apiKey,
+  );
+
+  // 3. Apply time filtering
+  const filtered = intent.time_hint !== "none"
+    ? filterByTimeHint(results, intent.time_hint)
+    : results;
+
+  // 4. Load minimal profile
+  const { data: profile } = await supabase.from("profiles")
+    .select("first_name, timezone, week_start, modules")
+    .eq("id", userId).single();
+
+  const now = new Date();
+  const context = {
+    user: {
+      first_name: profile?.first_name || "",
+      timezone: clientContext?.timezone || profile?.timezone || "UTC",
+      week_start: profile?.week_start || "mon",
+      modules_enabled: profile?.modules ? Object.keys(profile.modules).filter(k => (profile.modules as any)[k] !== false) : [],
+    },
+    now: {
+      iso: now.toISOString(),
+      local_date: now.toISOString().slice(0, 10),
+    },
+    retrieved: filtered.map(r => ({
+      kind: r.entity_type, id: r.entity_id, title: r.title,
+      snippet: r.snippet, score: r.score,
+      metadata: r.metadata, route: r.route,
+    })),
+    hints: {
+      time_hint: intent.time_hint,
+      entity_types: intent.entity_types,
+      goal: intent.goal,
+    },
+  };
+
+  return { contextJson: JSON.stringify(context), intent };
+}
+
 const SYSTEM_PROMPT = `You are LifeOS Copilot — a concise, accurate personal productivity assistant.
 
 RULES:
-1. Use ONLY the data provided in the memory pack and tool outputs. Never fabricate data.
+1. Use ONLY the data provided in the retrieval context and tool outputs. Never fabricate data.
 2. If you cannot find information, say: "I don't see that in your data yet."
 3. For ambiguous requests, ask a clarifying question instead of guessing.
 4. Keep responses short and actionable.
 5. When suggesting plans or bulk actions, describe what you'll do and ask "Shall I proceed?" before executing.
 6. For single safe actions the user explicitly requested (e.g., "create a task called X"), execute immediately.
 7. After executing actions, briefly confirm what was done.
-8. When answering questions, cite the specific data (e.g., "You have 3 overdue tasks: ...").
-9. Never reveal system internals or the memory pack structure.
+8. When answering questions, cite the specific data with IDs and routes (e.g., "You have 3 overdue tasks: ...").
+9. Never reveal system internals or the context structure.
 10. Use markdown formatting for readability.
-11. IMPORTANT: Only reference entity IDs that appear in the memory pack or search results. Never invent IDs.`;
+11. IMPORTANT: Only reference entity IDs that appear in the retrieved context or search results. Never invent IDs.
+12. When referencing items, include their route so users can navigate to them.`;
 
 const TOOLS = [
   {
     type: "function",
     function: {
       name: "search_lifeos",
-      description: "Search the user's LifeOS data across tasks, goals, events, habits, inbox items, notes, focus blocks.",
+      description: "Search the user's LifeOS data across tasks, goals, events, habits, inbox items, notes, focus blocks. Returns results with routes for navigation.",
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Search query" },
+          query: { type: "string", description: "Search query (required, must not be empty)" },
           types: {
             type: "array",
-            items: { type: "string", enum: ["tasks", "goals", "events", "focusBlocks", "habits", "inbox", "notes"] },
-            description: "Which data types to search",
+            items: { type: "string", enum: ["task", "goal", "event", "focus", "habit", "inbox", "note"] },
+            description: "Which entity types to search (uses search_index entity_type values)",
           },
-          limit: { type: "number", description: "Max results per type (default 10)" },
-          filters: {
-            type: "object",
-            properties: {
-              status: { type: "string" },
-              priority: { type: "string" },
-            },
-          },
+          limit: { type: "number", description: "Max results (default 12)" },
         },
-        required: ["query", "types"],
+        required: ["query"],
       },
     },
   },
@@ -183,103 +428,7 @@ const TOOLS = [
   },
 ];
 
-// Tools that require user confirmation before execution
 const RISKY_TOOLS = new Set(["triage_inbox", "apply_template"]);
-
-// ── Structured Memory Pack (built server-side from DB) ──
-
-async function buildServerMemoryPack(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  clientContext?: { timezone?: string; weekStart?: string }
-): Promise<string> {
-  const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
-  const threeDays = new Date(now.getTime() + 3 * 86400000).toISOString().slice(0, 10);
-  const pack: Record<string, unknown> = { today: todayStr, timezone: clientContext?.timezone || "UTC" };
-
-  // Overdue tasks
-  const { data: overdue } = await supabase.from("tasks")
-    .select("id, title, status, priority, due_date, project, goal_id")
-    .eq("user_id", userId).is("deleted_at", null)
-    .neq("status", "done").not("due_date", "is", null).lt("due_date", todayStr)
-    .order("due_date", { ascending: true }).limit(20);
-  pack.overdueTasks = (overdue || []).map((t: any) => ({ id: t.id, title: t.title, priority: t.priority, due: t.due_date }));
-
-  // Due soon
-  const { data: dueSoon } = await supabase.from("tasks")
-    .select("id, title, status, priority, due_date")
-    .eq("user_id", userId).is("deleted_at", null)
-    .neq("status", "done").gte("due_date", todayStr).lte("due_date", threeDays)
-    .order("due_date", { ascending: true }).limit(20);
-  pack.dueSoonTasks = (dueSoon || []).map((t: any) => ({ id: t.id, title: t.title, priority: t.priority, due: t.due_date }));
-
-  // Today's tasks (scheduled or due today)
-  const { data: todayTasks } = await supabase.from("tasks")
-    .select("id, title, status, priority, due_date, scheduled_start")
-    .eq("user_id", userId).is("deleted_at", null)
-    .or(`due_date.eq.${todayStr},scheduled_start.gte.${todayStr}T00:00:00,scheduled_start.lte.${todayStr}T23:59:59`)
-    .limit(20);
-  pack.todayTasks = (todayTasks || []).map((t: any) => ({ id: t.id, title: t.title, status: t.status, priority: t.priority }));
-
-  // Active goals
-  const { data: goals } = await supabase.from("goals")
-    .select("id, title, category, progress_value, target_date, status")
-    .eq("user_id", userId).is("deleted_at", null).eq("status", "active")
-    .limit(10);
-  pack.activeGoals = (goals || []).map((g: any) => ({ id: g.id, title: g.title, category: g.category, progress: g.progress_value, target: g.target_date }));
-
-  // Next 10 events
-  const { data: events } = await supabase.from("calendar_events")
-    .select("id, title, start_date_time, end_date_time, category")
-    .eq("user_id", userId).is("deleted_at", null)
-    .gte("start_date_time", now.toISOString())
-    .order("start_date_time", { ascending: true }).limit(10);
-  pack.upcomingEvents = (events || []).map((e: any) => ({ id: e.id, title: e.title, start: e.start_date_time, end: e.end_date_time }));
-
-  // Next 10 focus blocks
-  const { data: blocks } = await supabase.from("focus_blocks")
-    .select("id, title, start_date_time, end_date_time, status, linked_task_id")
-    .eq("user_id", userId).is("deleted_at", null)
-    .gte("start_date_time", now.toISOString())
-    .order("start_date_time", { ascending: true }).limit(10);
-  pack.upcomingFocusBlocks = (blocks || []).map((b: any) => ({ id: b.id, title: b.title, start: b.start_date_time, end: b.end_date_time, status: b.status }));
-
-  // Unprocessed inbox
-  const { data: inbox } = await supabase.from("inbox_items")
-    .select("id, title, content, status")
-    .eq("user_id", userId).is("deleted_at", null).eq("status", "unprocessed")
-    .limit(10);
-  pack.unprocessedInbox = (inbox || []).map((i: any) => ({ id: i.id, title: i.title || (i.content || "").slice(0, 60) }));
-
-  // Active habits with recent log count
-  const { data: habits } = await supabase.from("habits")
-    .select("id, title, frequency, target_count_per_period, category, status")
-    .eq("user_id", userId).is("deleted_at", null).eq("status", "active")
-    .limit(10);
-  pack.activeHabits = (habits || []).map((h: any) => ({ id: h.id, title: h.title, frequency: h.frequency, target: h.target_count_per_period }));
-
-  // Templates
-  const { data: templates } = await supabase.from("templates")
-    .select("id, name, category")
-    .eq("user_id", userId).is("deleted_at", null)
-    .limit(10);
-  pack.templates = (templates || []).map((t: any) => ({ id: t.id, name: t.name, category: t.category }));
-
-  // Weekly plan
-  const weekStart = todayStr; // simplified
-  const { data: plan } = await supabase.from("weekly_plans")
-    .select("committed_task_ids")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false }).limit(1);
-  if (plan?.[0]) {
-    const ids = (plan[0].committed_task_ids || []) as string[];
-    pack.weeklyPlanCommitted = ids.length;
-  }
-
-  const json = JSON.stringify(pack);
-  return json.length > 8000 ? json.slice(0, 8000) + "..." : json;
-}
 
 // ── Tool Execution Functions ──
 
@@ -292,210 +441,29 @@ interface ToolExecResult {
 
 async function executeSearch(
   supabase: ReturnType<typeof createClient>,
-  userId: string,
-  args: { query?: string; types?: string[]; limit?: number; filters?: { status?: string; priority?: string } }
+  userId: string, apiKey: string,
+  args: { query?: string; types?: string[]; limit?: number }
 ): Promise<ToolExecResult> {
   const query = (args.query || "").trim();
-  const types = args.types || [];
-  const limit = args.limit || 10;
-  const filters = args.filters || {};
-  const results: Record<string, unknown>[] = [];
-  const dataUsed: string[] = [];
+  if (!query) {
+    return { output: { results: [], count: 0 }, actionsTaken: [], dataUsed: [] };
+  }
 
-  // Map copilot types to search_index entity_types
-  const typeMap: Record<string, string> = {
-    tasks: "task", goals: "goal", events: "event", habits: "habit",
-    inbox: "inbox", notes: "note", focusBlocks: "focus",
+  const { results } = await performSearch(
+    supabase, userId, query, args.types || null, args.limit || 12, apiKey,
+  );
+
+  const mapped = results.map(r => ({
+    kind: r.entity_type, id: r.entity_id, title: r.title,
+    summary: r.snippet, metadata: r.metadata,
+    score: r.score, route: r.route, matched_terms: r.matched_terms,
+  }));
+
+  return {
+    output: { results: mapped, count: mapped.length },
+    actionsTaken: [],
+    dataUsed: [`${mapped.length} results via semantic search`],
   };
-  const searchTypes = types.length > 0
-    ? types.map(t => typeMap[t]).filter(Boolean)
-    : null;
-
-  if (query) {
-    // Try semantic search via the search_entities DB function (pg_trgm)
-    try {
-      // First try to use query expansion via the semantic-search edge function
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-
-      // Expand query using chat model for better fuzzy matching
-      let expandedTerms = [query];
-      if (lovableKey) {
-        try {
-          const expandResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash-lite",
-              messages: [
-                { role: "system", content: "You expand search queries for a personal productivity app. Given a query, return a JSON array of 2-4 alternative search terms. Only output the JSON array." },
-                { role: "user", content: query },
-              ],
-              max_tokens: 150, temperature: 0.2,
-            }),
-          });
-          if (expandResp.ok) {
-            const expandData = await expandResp.json();
-            const content = expandData.choices?.[0]?.message?.content || "";
-            const match = content.match(/\[[\s\S]*?\]/);
-            if (match) {
-              const terms = JSON.parse(match[0]) as string[];
-              expandedTerms = [query, ...terms.slice(0, 4)];
-            }
-          }
-        } catch { /* fallback to original query */ }
-      }
-
-      // Search with each term
-      const resultMap = new Map<string, any>();
-      for (const term of expandedTerms) {
-        const { data: searchResults } = await supabase.rpc("search_entities", {
-          p_user_id: userId,
-          p_query: term,
-          p_types: searchTypes,
-          p_limit: limit,
-        });
-        for (const r of (searchResults || [])) {
-          const key = `${r.entity_type}:${r.entity_id}`;
-          if (!resultMap.has(key)) {
-            resultMap.set(key, r);
-          }
-        }
-      }
-
-      const semanticResults = Array.from(resultMap.values())
-        .sort((a: any, b: any) => b.score - a.score)
-        .slice(0, limit);
-
-      if (semanticResults.length > 0) {
-        results.push(...semanticResults.map((r: any) => ({
-          kind: r.entity_type, id: r.entity_id, title: r.title,
-          summary: r.snippet,
-          metadata: r.metadata,
-          score: r.score,
-        })));
-        dataUsed.push(`${semanticResults.length} results via semantic search`);
-        return { output: { results, count: results.length }, actionsTaken: [], dataUsed };
-      }
-    } catch (err) {
-      console.warn("Semantic search failed, falling back to keyword search:", err);
-    }
-  }
-
-  // Fallback: keyword search (original implementation)
-  const today = new Date().toISOString().slice(0, 10);
-
-  if (types.includes("tasks")) {
-    let q = supabase.from("tasks").select("id, title, description, status, priority, due_date, tags, project, goal_id")
-      .eq("user_id", userId).is("deleted_at", null);
-    if (filters.status === "overdue") {
-      q = q.neq("status", "done").lt("due_date", today).not("due_date", "is", null);
-    } else if (filters.status) q = q.eq("status", filters.status);
-    if (filters.priority) q = q.eq("priority", filters.priority);
-    if (query) q = q.or(`title.ilike.%${query}%,description.ilike.%${query}%`);
-    q = q.limit(limit);
-    const { data } = await q;
-    if (data) {
-      results.push(...data.map((t: any) => ({
-        kind: "task", id: t.id, title: t.title,
-        summary: `Status: ${t.status}, Priority: ${t.priority}, Due: ${t.due_date || "none"}`,
-        metadata: { status: t.status, priority: t.priority, dueDate: t.due_date, tags: t.tags, project: t.project },
-      })));
-      dataUsed.push(`${data.length} tasks`);
-    }
-  }
-
-  if (types.includes("goals")) {
-    let q = supabase.from("goals").select("id, title, status, category, progress_value, target_date")
-      .eq("user_id", userId).is("deleted_at", null);
-    if (query) q = q.ilike("title", `%${query}%`);
-    q = q.limit(limit);
-    const { data } = await q;
-    if (data) {
-      results.push(...data.map((g: any) => ({
-        kind: "goal", id: g.id, title: g.title,
-        summary: `Status: ${g.status}, Category: ${g.category}, Progress: ${g.progress_value}%, Target: ${g.target_date}`,
-      })));
-      dataUsed.push(`${data.length} goals`);
-    }
-  }
-
-  if (types.includes("events")) {
-    let q = supabase.from("calendar_events").select("id, title, start_date_time, end_date_time, category")
-      .eq("user_id", userId).is("deleted_at", null);
-    if (query) q = q.ilike("title", `%${query}%`);
-    q = q.limit(limit);
-    const { data } = await q;
-    if (data) {
-      results.push(...data.map((e: any) => ({
-        kind: "event", id: e.id, title: e.title,
-        summary: `${e.start_date_time} - ${e.end_date_time} (${e.category})`,
-      })));
-      dataUsed.push(`${data.length} events`);
-    }
-  }
-
-  if (types.includes("habits")) {
-    let q = supabase.from("habits").select("id, title, frequency, target_count_per_period, category, status")
-      .eq("user_id", userId).is("deleted_at", null);
-    if (query) q = q.ilike("title", `%${query}%`);
-    q = q.limit(limit);
-    const { data } = await q;
-    if (data) {
-      results.push(...data.map((h: any) => ({
-        kind: "habit", id: h.id, title: h.title,
-        summary: `${h.frequency}, Target: ${h.target_count_per_period}/period`,
-      })));
-      dataUsed.push(`${data.length} habits`);
-    }
-  }
-
-  if (types.includes("inbox")) {
-    let q = supabase.from("inbox_items").select("id, title, content, status, source, tags")
-      .eq("user_id", userId).is("deleted_at", null);
-    if (query) q = q.or(`content.ilike.%${query}%,title.ilike.%${query}%`);
-    q = q.limit(limit);
-    const { data } = await q;
-    if (data) {
-      results.push(...data.map((i: any) => ({
-        kind: "inbox", id: i.id, title: i.title || (i.content || "").slice(0, 60),
-        summary: `Status: ${i.status}, Source: ${i.source}`,
-      })));
-      dataUsed.push(`${data.length} inbox items`);
-    }
-  }
-
-  if (types.includes("notes")) {
-    let q = supabase.from("notes").select("id, title, content, tags, pinned")
-      .eq("user_id", userId).is("deleted_at", null);
-    if (query) q = q.or(`title.ilike.%${query}%,content.ilike.%${query}%`);
-    q = q.limit(limit);
-    const { data } = await q;
-    if (data) {
-      results.push(...data.map((n: any) => ({
-        kind: "note", id: n.id, title: n.title,
-        summary: (n.content || "").slice(0, 100),
-      })));
-      dataUsed.push(`${data.length} notes`);
-    }
-  }
-
-  if (types.includes("focusBlocks")) {
-    let q = supabase.from("focus_blocks").select("id, title, start_date_time, end_date_time, status, linked_task_id")
-      .eq("user_id", userId).is("deleted_at", null);
-    if (query) q = q.ilike("title", `%${query}%`);
-    q = q.limit(limit);
-    const { data } = await q;
-    if (data) {
-      results.push(...data.map((fb: any) => ({
-        kind: "focusBlock", id: fb.id, title: fb.title,
-        summary: `${fb.start_date_time} (${fb.status})`,
-      })));
-      dataUsed.push(`${data.length} focus blocks`);
-    }
-  }
-
-  return { output: { results, count: results.length }, actionsTaken: [], dataUsed };
 }
 
 async function executeCreateTask(
@@ -504,7 +472,6 @@ async function executeCreateTask(
 ): Promise<ToolExecResult> {
   if (!args.title || args.title.trim().length === 0) return { output: { error: "Title is required" }, actionsTaken: [], dataUsed: [] };
   if (args.title.length > 500) return { output: { error: "Title too long" }, actionsTaken: [], dataUsed: [] };
-
   const now = new Date().toISOString();
   const { data, error } = await supabase.from("tasks").insert({
     user_id: userId, title: args.title.trim(),
@@ -516,9 +483,8 @@ async function executeCreateTask(
     goal_id: args.goalId || null, status: "todo",
     subtasks: [], source: "copilot", created_at: now, updated_at: now,
   }).select("id").single();
-
   if (error) return { output: { error: error.message }, actionsTaken: [], dataUsed: [] };
-  return { output: { id: data.id }, actionsTaken: [`Created task "${args.title}"`], dataUsed: [], createdEntities: [{ type: "task", id: data.id }] };
+  return { output: { id: data.id, route: "/tasks" }, actionsTaken: [`Created task "${args.title}"`], dataUsed: [], createdEntities: [{ type: "task", id: data.id }] };
 }
 
 async function executeUpdateTask(
@@ -526,11 +492,8 @@ async function executeUpdateTask(
   args: { id: string; patch: Record<string, unknown> }
 ): Promise<ToolExecResult> {
   if (!args.id) return { output: { error: "Task ID required" }, actionsTaken: [], dataUsed: [] };
-
-  // Verify ownership
   const { data: existing } = await supabase.from("tasks").select("id").eq("id", args.id).eq("user_id", userId).single();
   if (!existing) return { output: { error: "Task not found" }, actionsTaken: [], dataUsed: [] };
-
   const patch: Record<string, unknown> = {};
   if (args.patch.title !== undefined) patch.title = String(args.patch.title).slice(0, 500);
   if (args.patch.description !== undefined) patch.description = String(args.patch.description).slice(0, 5000);
@@ -542,7 +505,6 @@ async function executeUpdateTask(
   if (args.patch.dueDate !== undefined) patch.due_date = args.patch.dueDate;
   if (args.patch.tags !== undefined) patch.tags = args.patch.tags;
   patch.updated_at = new Date().toISOString();
-
   const { error } = await supabase.from("tasks").update(patch).eq("id", args.id).eq("user_id", userId);
   if (error) return { output: { error: error.message }, actionsTaken: [], dataUsed: [] };
   return { output: { ok: true }, actionsTaken: [`Updated task ${args.id}`], dataUsed: [] };
@@ -554,38 +516,30 @@ async function executeScheduleFocusBlock(
 ): Promise<ToolExecResult> {
   const { data: task } = await supabase.from("tasks").select("id, title").eq("id", args.taskId).eq("user_id", userId).single();
   if (!task) return { output: { error: "Task not found" }, actionsTaken: [], dataUsed: [] };
-
   let startDT: Date;
   if (args.startTime) {
     const [h, m] = args.startTime.split(":").map(Number);
     startDT = new Date(args.date);
     startDT.setHours(h, m, 0, 0);
   } else {
-    // Simple: default to 9am
     startDT = new Date(args.date);
     startDT.setHours(9, 0, 0, 0);
   }
-
   const endDT = new Date(startDT.getTime() + (args.durationMinutes || 60) * 60000);
   const now = new Date().toISOString();
-
   const { data, error } = await supabase.from("focus_blocks").insert({
     user_id: userId, title: task.title,
     start_date_time: startDT.toISOString(), end_date_time: endDT.toISOString(),
     linked_task_id: args.taskId, status: "planned", created_at: now, updated_at: now,
   }).select("id").single();
-
   if (error) return { output: { error: error.message }, actionsTaken: [], dataUsed: [] };
-
   await supabase.from("tasks").update({
     scheduled_start: startDT.toISOString(), scheduled_end: endDT.toISOString(), updated_at: now,
   }).eq("id", args.taskId).eq("user_id", userId);
-
   return {
-    output: { id: data.id, start: startDT.toISOString(), end: endDT.toISOString() },
+    output: { id: data.id, start: startDT.toISOString(), end: endDT.toISOString(), route: "/calendar" },
     actionsTaken: [`Scheduled focus block for "${task.title}" at ${startDT.toISOString().slice(11, 16)}`],
-    dataUsed: [],
-    createdEntities: [{ type: "focus_block", id: data.id }],
+    dataUsed: [], createdEntities: [{ type: "focus_block", id: data.id }],
   };
 }
 
@@ -601,9 +555,8 @@ async function executeCreateEvent(
     category: args.category || "personal", notes: args.notes?.slice(0, 2000) || null,
     created_at: now, updated_at: now,
   }).select("id").single();
-
   if (error) return { output: { error: error.message }, actionsTaken: [], dataUsed: [] };
-  return { output: { id: data.id }, actionsTaken: [`Created event "${args.title}"`], dataUsed: [], createdEntities: [{ type: "event", id: data.id }] };
+  return { output: { id: data.id, route: "/calendar" }, actionsTaken: [`Created event "${args.title}"`], dataUsed: [], createdEntities: [{ type: "event", id: data.id }] };
 }
 
 async function executeCreateGoal(
@@ -620,9 +573,8 @@ async function executeCreateGoal(
     progress_type: args.progressType || "manual", progress_value: 0,
     linked_task_ids: [], milestones: [], created_at: now, updated_at: now,
   }).select("id").single();
-
   if (error) return { output: { error: error.message }, actionsTaken: [], dataUsed: [] };
-  return { output: { id: data.id }, actionsTaken: [`Created goal "${args.title}"`], dataUsed: [], createdEntities: [{ type: "goal", id: data.id }] };
+  return { output: { id: data.id, route: "/goals" }, actionsTaken: [`Created goal "${args.title}"`], dataUsed: [], createdEntities: [{ type: "goal", id: data.id }] };
 }
 
 async function executeTriageInbox(
@@ -632,14 +584,11 @@ async function executeTriageInbox(
   const now = new Date().toISOString();
   const converted: { inboxId: string; kind: string; entityId: string }[] = [];
   const createdEntities: { type: string; id: string }[] = [];
-
   for (const inboxId of (args.inboxIds || []).slice(0, 20)) {
     const { data: item } = await supabase.from("inbox_items").select("*").eq("id", inboxId).eq("user_id", userId).single();
     if (!item) continue;
-
     let entityId = "";
     const defaults = args.defaults || {};
-
     switch (args.convertTo) {
       case "task": {
         const { data } = await supabase.from("tasks").insert({
@@ -686,7 +635,6 @@ async function executeTriageInbox(
         break;
       }
     }
-
     if (entityId) {
       await supabase.from("inbox_items").update({
         status: "converted", conversion: { kind: args.convertTo, entityId, convertedAt: now }, updated_at: now,
@@ -694,7 +642,6 @@ async function executeTriageInbox(
       converted.push({ inboxId, kind: args.convertTo, entityId });
     }
   }
-
   return {
     output: { converted },
     actionsTaken: [`Converted ${converted.length} inbox items to ${args.convertTo}s`],
@@ -712,12 +659,10 @@ async function executeApplyTemplate(
   if (!template.is_built_in && template.user_id !== userId) {
     return { output: { error: "Access denied" }, actionsTaken: [], dataUsed: [] };
   }
-
   const now = new Date().toISOString();
   const items = (template.items || []) as any[];
   const summary: Record<string, number> = {};
   const createdEntities: { type: string; id: string }[] = [];
-
   for (const item of items) {
     switch (item.type) {
       case "task": {
@@ -768,7 +713,6 @@ async function executeApplyTemplate(
       }
     }
   }
-
   return {
     output: { created: summary },
     actionsTaken: [`Applied template "${template.name}": created ${Object.entries(summary).map(([k, v]) => `${v} ${k}`).join(", ")}`],
@@ -778,11 +722,11 @@ async function executeApplyTemplate(
 
 // Tool dispatcher
 async function executeTool(
-  supabase: ReturnType<typeof createClient>, userId: string,
+  supabase: ReturnType<typeof createClient>, userId: string, apiKey: string,
   toolName: string, args: Record<string, unknown>
 ): Promise<ToolExecResult> {
   switch (toolName) {
-    case "search_lifeos": return await executeSearch(supabase, userId, args as any);
+    case "search_lifeos": return await executeSearch(supabase, userId, apiKey, args as any);
     case "create_task": return await executeCreateTask(supabase, userId, args as any);
     case "update_task": return await executeUpdateTask(supabase, userId, args as any);
     case "schedule_task_focus_block": return await executeScheduleFocusBlock(supabase, userId, args as any);
@@ -803,17 +747,12 @@ async function logAudit(
 ) {
   try {
     await supabase.from("copilot_tool_audit").insert({
-      user_id: userId,
-      thread_id: threadId,
-      tool_name: toolName,
-      tool_args: toolArgs,
-      outcome,
-      error: error || null,
+      user_id: userId, thread_id: threadId,
+      tool_name: toolName, tool_args: toolArgs,
+      outcome, error: error || null,
       created_entities: createdEntities || [],
     });
-  } catch (e) {
-    console.error("Audit log failed:", e);
-  }
+  } catch (e) { console.error("Audit log failed:", e); }
 }
 
 // Persist message to DB
@@ -831,9 +770,7 @@ async function persistMessage(
       tool_args: toolArgs || null,
       tool_result: toolResult || null,
     });
-  } catch (e) {
-    console.error("Message persist failed:", e);
-  }
+  } catch (e) { console.error("Message persist failed:", e); }
 }
 
 function describeAction(name: string, args: Record<string, unknown>): string {
@@ -948,7 +885,7 @@ serve(async (req) => {
         user_id: userId, title,
       }).select("id").single();
       if (threadErr || !thread) {
-        return new Response(JSON.stringify({ error: "Failed to create thread" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ error: "Failed to create thread" }), { status: 500, headers: jsonHeaders });
       }
       currentThreadId = thread.id;
     }
@@ -959,20 +896,18 @@ serve(async (req) => {
       const allActions: string[] = [];
       for (const tc of confirmedToolCalls) {
         const args = typeof tc.arguments === "string" ? JSON.parse(tc.arguments) : tc.arguments;
-        const result = await executeTool(supabase, userId, tc.name, args);
+        const result = await executeTool(supabase, userId, LOVABLE_API_KEY, tc.name, args);
         allActions.push(...result.actionsTaken);
         await logAudit(supabase, userId, currentThreadId, tc.name, args,
           result.output.error ? "failed" : "success",
           result.output.error as string | undefined, result.createdEntities);
         await persistMessage(supabase, currentThreadId!, userId, "tool", JSON.stringify(result.output), tc.name, args, result.output);
       }
-
       const confirmContent = `✅ Done! ${allActions.join(". ")}`;
       await persistMessage(supabase, currentThreadId!, userId, "assistant", confirmContent);
-
       return new Response(
         JSON.stringify({ type: "confirmation_executed", actionsTaken: allActions, threadId: currentThreadId }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: jsonHeaders }
       );
     }
 
@@ -990,22 +925,20 @@ serve(async (req) => {
       .order("created_at", { ascending: true })
       .limit(20);
 
-    // ── Build server-side memory pack ──
-    stage = "load_memory";
-    const memoryPack = await buildServerMemoryPack(supabase, userId, clientContext);
-    console.log(`[${requestId}] memory pack built, len=${memoryPack.length}`);
+    // ── Build retrieval-driven context (replaces memory pack) ──
+    stage = "build_context";
+    const { contextJson, intent } = await buildRetrievalContext(
+      supabase, userId, message || "", LOVABLE_API_KEY, clientContext,
+    );
+    console.log(`[${requestId}] context built, len=${contextJson.length}, intent=${intent.goal}`);
 
     // ── Build AI messages ──
     const aiMessages: any[] = [
-      { role: "system", content: `${SYSTEM_PROMPT}\n\n## Current LifeOS Data\n${memoryPack}` },
+      { role: "system", content: `${SYSTEM_PROMPT}\n\n## Retrieved Context\n${contextJson}` },
     ];
 
-    // Add thread messages (skip tool messages for AI context, add them properly)
     for (const m of (dbMessages || [])) {
-      if (m.role === "tool") {
-        // Tool results — skip in simple message list, they were part of the tool loop
-        continue;
-      }
+      if (m.role === "tool") continue;
       aiMessages.push({ role: m.role === "system" ? "user" : m.role, content: m.content });
     }
 
@@ -1020,21 +953,18 @@ serve(async (req) => {
       const isLastRound = maxRounds === 0;
 
       if (isLastRound) {
-        // Stream final response
         const streamResp = await callAIStreaming(LOVABLE_API_KEY, aiMessages, TOOLS);
         if (!streamResp.ok) {
           const status = streamResp.status;
           await streamResp.text();
-          if (status === 429) return new Response(JSON.stringify({ error: "AI rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          if (status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          return new Response(JSON.stringify({ error: "AI service error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          if (status === 429) return new Response(JSON.stringify({ error: "AI rate limit exceeded." }), { status: 429, headers: jsonHeaders });
+          if (status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: jsonHeaders });
+          return new Response(JSON.stringify({ error: "AI service error" }), { status: 500, headers: jsonHeaders });
         }
 
         const metaEvent = `data: ${JSON.stringify({ copilot_metadata: { actionsTaken: allActionsTaken, dataUsed: allDataUsed, threadId: currentThreadId } })}\n\n`;
         const encoder = new TextEncoder();
         const metaBytes = encoder.encode(metaEvent);
-
-        // Collect streamed content for persistence
         let streamedContent = "";
 
         const readable = new ReadableStream({
@@ -1043,13 +973,10 @@ serve(async (req) => {
             const reader = streamResp.body!.getReader();
             const decoder = new TextDecoder();
             let buffer = "";
-
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
               controller.enqueue(value);
-
-              // Parse to collect content
               buffer += decoder.decode(value, { stream: true });
               let nl: number;
               while ((nl = buffer.indexOf("\n")) !== -1) {
@@ -1063,12 +990,9 @@ serve(async (req) => {
                 } catch { /* partial */ }
               }
             }
-
-            // Persist assistant message
             if (streamedContent) {
               await persistMessage(supabase, currentThreadId!, userId, "assistant", streamedContent);
             }
-
             controller.close();
           },
         });
@@ -1088,11 +1012,10 @@ serve(async (req) => {
         const riskyCalls = msg.tool_calls.filter((tc: any) => RISKY_TOOLS.has(tc.function.name));
 
         if (riskyCalls.length > 0) {
-          // Execute safe calls
           const safeCalls = msg.tool_calls.filter((tc: any) => !RISKY_TOOLS.has(tc.function.name));
           for (const tc of safeCalls) {
             const args = JSON.parse(tc.function.arguments);
-            const result = await executeTool(supabase, userId, tc.function.name, args);
+            const result = await executeTool(supabase, userId, LOVABLE_API_KEY, tc.function.name, args);
             allActionsTaken.push(...result.actionsTaken);
             allDataUsed.push(...result.dataUsed);
             await logAudit(supabase, userId, currentThreadId, tc.function.name, args,
@@ -1100,7 +1023,6 @@ serve(async (req) => {
             await persistMessage(supabase, currentThreadId!, userId, "tool", JSON.stringify(result.output), tc.function.name, args, result.output);
           }
 
-          // Return confirmation request
           const pendingActions = riskyCalls.map((tc: any) => ({
             id: tc.id,
             name: tc.function.name,
@@ -1108,7 +1030,6 @@ serve(async (req) => {
             description: describeAction(tc.function.name, JSON.parse(tc.function.arguments)),
           }));
 
-          // Log as needs_confirmation
           for (const tc of riskyCalls) {
             await logAudit(supabase, userId, currentThreadId, tc.function.name,
               JSON.parse(tc.function.arguments), "needs_confirmation");
@@ -1124,21 +1045,18 @@ serve(async (req) => {
               dataUsed: allDataUsed,
               threadId: currentThreadId,
             }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { headers: jsonHeaders }
           );
         }
 
-        // Execute all safe tool calls
         for (const tc of msg.tool_calls) {
           const args = JSON.parse(tc.function.arguments);
-          const result = await executeTool(supabase, userId, tc.function.name, args);
+          const result = await executeTool(supabase, userId, LOVABLE_API_KEY, tc.function.name, args);
           allActionsTaken.push(...result.actionsTaken);
           allDataUsed.push(...result.dataUsed);
-
           await logAudit(supabase, userId, currentThreadId, tc.function.name, args,
             result.output.error ? "failed" : "success", result.output.error as string | undefined, result.createdEntities);
           await persistMessage(supabase, currentThreadId!, userId, "tool", JSON.stringify(result.output), tc.function.name, args, result.output);
-
           aiMessages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result.output) });
         }
         continue;
@@ -1154,19 +1072,18 @@ serve(async (req) => {
         actionsTaken: allActionsTaken,
         dataUsed: allDataUsed,
         threadId: currentThreadId,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }), { headers: jsonHeaders });
     }
 
-    // Fallback
     return new Response(
       JSON.stringify({ type: "final", content: "I wasn't able to complete that request. Please try again.", actionsTaken: allActionsTaken, dataUsed: allDataUsed, threadId: currentThreadId }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: jsonHeaders }
     );
   } catch (err: any) {
     console.error(`[${requestId}] COPILOT_ERR stage=${stage}:`, err?.stack || err?.message || err);
     return new Response(
       JSON.stringify({ ok: false, stage, message: err?.message || "Internal error", requestId }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: jsonHeaders }
     );
   }
 });
