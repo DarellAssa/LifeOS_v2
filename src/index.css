@@ -6,51 +6,51 @@
 
 @layer base {
   :root {
-    /* LifeOS — Warm, nature-inspired light theme */
-    --background: 140 25% 90%;          /* noticeable sage green */
-    --foreground: 25 20% 16%;
+    /* LifeOS — Warm neutral + muted indigo accent */
+    --background: 30 33% 97%;           /* warm off-white */
+    --foreground: 222 47% 11%;          /* slate-900 */
 
-    --card: 140 18% 95%;                /* lighter green-white for cards */
-    --card-foreground: 25 20% 16%;
+    --card: 0 0% 100%;                  /* pure white */
+    --card-foreground: 222 47% 11%;
 
-    --popover: 140 18% 95%;
-    --popover-foreground: 25 20% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 152 40% 38%;            /* sage green — nature */
+    --primary: 243 75% 59%;             /* muted indigo */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 138 15% 92%;           /* light green-gray */
-    --secondary-foreground: 25 20% 16%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 138 12% 92%;
-    --muted-foreground: 25 10% 48%;
+    --muted: 220 14% 96%;              /* soft neutral gray */
+    --muted-foreground: 215 16% 40%;   /* readable secondary text */
 
-    --accent: 152 30% 92%;             /* light sage tint */
-    --accent-foreground: 152 40% 28%;
+    --accent: 243 75% 96%;             /* very light indigo tint */
+    --accent-foreground: 243 75% 25%;
 
-    --destructive: 0 60% 50%;
+    --destructive: 0 55% 48%;          /* muted red, not neon */
     --destructive-foreground: 0 0% 100%;
 
     --success: 152 45% 42%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 70% 50%;
+    --warning: 38 60% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 138 12% 87%;
-    --input: 138 12% 87%;
-    --ring: 152 40% 38%;
+    --border: 220 13% 90%;             /* clearer separation */
+    --input: 220 13% 90%;
+    --ring: 243 75% 59%;
 
-    --radius: 0.75rem;
+    --radius: 14px;
 
-    --sidebar-background: 138 18% 94%;
-    --sidebar-foreground: 25 10% 42%;
-    --sidebar-primary: 152 40% 38%;
+    --sidebar-background: 30 33% 97%;
+    --sidebar-foreground: 215 16% 40%;
+    --sidebar-primary: 243 75% 59%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 152 25% 93%;
-    --sidebar-accent-foreground: 152 40% 28%;
-    --sidebar-border: 138 12% 88%;
-    --sidebar-ring: 152 40% 38%;
+    --sidebar-accent: 243 75% 96%;
+    --sidebar-accent-foreground: 243 75% 25%;
+    --sidebar-border: 220 13% 90%;
+    --sidebar-ring: 243 75% 59%;
   }
 
   .dark {
