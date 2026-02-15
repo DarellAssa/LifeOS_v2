@@ -7,13 +7,13 @@
 @layer base {
   :root {
     /* LifeOS — Warm, nature-inspired light theme */
-    --background: 138 20% 95%;          /* soft sage green tint */
+    --background: 140 25% 90%;          /* noticeable sage green */
     --foreground: 25 20% 16%;
 
-    --card: 138 15% 98%;                /* very subtle green-white */
+    --card: 140 18% 95%;                /* lighter green-white for cards */
     --card-foreground: 25 20% 16%;
 
-    --popover: 138 15% 98%;
+    --popover: 140 18% 95%;
     --popover-foreground: 25 20% 16%;
 
     --primary: 152 40% 38%;            /* sage green — nature */
