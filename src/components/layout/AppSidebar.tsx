@@ -1,7 +1,5 @@
 import {
-  LayoutDashboard, CheckSquare, Target, CalendarDays,
-  Repeat, BarChart3, ClipboardList, Settings, Bell, Inbox, LayoutTemplate, Cog,
-  StickyNote, Zap, Heart, Activity, History,
+  Sun, ClipboardList, Inbox, TrendingUp, MoreHorizontal,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -9,38 +7,23 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from '@/components/ui/sidebar';
 import { useAppContext } from '@/store/AppContext';
-import { useAuth } from '@/hooks/useAuth';
 import { Badge } from '@/components/ui/badge';
 
-type NavItem = { title: string; url: string; icon: any; module?: string };
+type NavItem = { title: string; url: string; icon: any };
 
 const navItems: NavItem[] = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'Tasks', url: '/tasks', icon: CheckSquare, module: 'tasks' },
-  { title: 'Goals', url: '/goals', icon: Target, module: 'goals' },
-  { title: 'Calendar', url: '/calendar', icon: CalendarDays, module: 'calendar' },
-  { title: 'Habits', url: '/habits', icon: Repeat, module: 'habits' },
-  { title: 'Inbox', url: '/inbox', icon: Inbox, module: 'inbox' },
-  { title: 'Templates', url: '/templates', icon: LayoutTemplate, module: 'templates' },
-  { title: 'Automations', url: '/automations', icon: Cog, module: 'automations' },
-  { title: 'Analytics', url: '/analytics', icon: BarChart3, module: 'analytics' },
-  { title: 'Planning', url: '/planning', icon: ClipboardList, module: 'planning' },
-  { title: 'Notifications', url: '/notifications', icon: Bell, module: 'notifications' },
-  { title: 'Activity', url: '/activity', icon: History },
-  { title: 'Settings', url: '/settings', icon: Settings },
+  { title: 'Today', url: '/', icon: Sun },
+  { title: 'Plan', url: '/plan', icon: ClipboardList },
+  { title: 'Capture', url: '/capture', icon: Inbox },
+  { title: 'Progress', url: '/progress', icon: TrendingUp },
+  { title: 'More', url: '/more', icon: MoreHorizontal },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const { data } = useAppContext();
-  const { isModuleEnabled } = useAuth();
   const inboxCount = data.inboxItems.filter(i => i.status === 'unprocessed').length;
-
-  const visibleItems = navItems.filter(item => {
-    if (!item.module) return true; // always show Dashboard, Settings
-    return isModuleEnabled(item.module);
-  });
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border" data-tour="sidebar">
@@ -52,33 +35,32 @@ export function AppSidebar() {
         )}
         {collapsed && <span className="text-lg font-bold text-primary mx-auto">L</span>}
       </div>
-      <SidebarContent className="pt-2">
+      <SidebarContent className="pt-4">
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {visibleItems.map((item) => (
+            <SidebarMenu className="space-y-1">
+              {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
                       end={item.url === '/'}
-                      className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                       data-tour={
-                        item.title === 'Tasks' ? 'nav-tasks' :
-                        item.title === 'Calendar' ? 'nav-calendar' :
-                        item.title === 'Goals' ? 'nav-goals' :
-                        item.title === 'Inbox' ? 'nav-inbox' :
-                        item.title === 'Settings' ? 'nav-settings' :
+                        item.title === 'Capture' ? 'nav-inbox' :
+                        item.title === 'Plan' ? 'nav-tasks' :
                         undefined
                       }
                     >
-                      <item.icon className="h-4 w-4 shrink-0" />
+                      <item.icon className="h-[18px] w-[18px] shrink-0" />
                       {!collapsed && (
                         <span className="flex items-center gap-2 flex-1">
                           {item.title}
-                          {item.title === 'Inbox' && inboxCount > 0 && (
-                            <Badge variant="destructive" className="text-[8px] h-4 px-1 ml-auto">{inboxCount}</Badge>
+                          {item.title === 'Capture' && inboxCount > 0 && (
+                            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 ml-auto font-normal">
+                              {inboxCount}
+                            </Badge>
                           )}
                         </span>
                       )}
