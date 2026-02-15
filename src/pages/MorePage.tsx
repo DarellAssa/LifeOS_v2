@@ -48,7 +48,7 @@ export default function MorePage() {
   const { isModuleEnabled } = useAuth();
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-xl mx-auto space-y-8 py-2">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">More</h1>
         <p className="text-sm text-muted-foreground">All your tools in one place</p>
@@ -60,12 +60,12 @@ export default function MorePage() {
         return (
           <section key={cat.label} className="space-y-2">
             <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{cat.label}</h2>
-            <div className="space-y-0.5">
+            <div className="divide-y divide-border">
               {visibleItems.map(item => (
                 <button
                   key={item.url}
                   onClick={() => navigate(item.url)}
-                  className="flex items-center gap-3 w-full rounded-lg px-4 py-3 text-left transition-colors hover:bg-card border border-transparent hover:border-border"
+                  className="flex items-center gap-3 w-full py-3 px-2 text-left transition-colors hover:bg-secondary rounded-lg"
                 >
                   <item.icon className="h-[18px] w-[18px] text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">

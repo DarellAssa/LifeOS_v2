@@ -95,11 +95,11 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
                   setBellOpen(false);
                 }} className={`w-full text-left p-3 border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${!n.readAt ? 'bg-primary/5' : ''}`}>
                   <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full shrink-0 ${n.severity === 'critical' ? 'bg-destructive' : n.severity === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'}`} />
+                    <div className={`h-2 w-2 rounded-full shrink-0 ${n.severity === 'critical' ? 'bg-destructive' : n.severity === 'warning' ? 'bg-warning' : 'bg-primary/50'}`} />
                     <p className="text-xs font-medium truncate flex-1">{n.title}</p>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5 truncate ml-4">{n.message}</p>
-                  <p className="text-[9px] text-muted-foreground mt-0.5 ml-4">{format(new Date(n.createdAt), 'h:mm a')}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate ml-4">{n.message}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 ml-4">{format(new Date(n.createdAt), 'h:mm a')}</p>
                 </button>
               ))}
             </div>

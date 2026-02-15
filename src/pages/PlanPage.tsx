@@ -3,7 +3,7 @@ import { useAppContext } from '@/store/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Calendar, ChevronRight } from 'lucide-react';
-import { format, addDays, isAfter, isBefore, parseISO } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
 type Segment = 'today' | 'upcoming' | 'all';
@@ -54,29 +54,29 @@ export default function PlanPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 py-2">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Plan</h1>
           <p className="text-sm text-muted-foreground">Tasks & schedule in one place</p>
         </div>
-        <Button onClick={() => { setQuickTitle(''); document.getElementById('plan-quick-add')?.focus(); }} className="gap-2">
+        <Button onClick={() => document.getElementById('plan-quick-add')?.focus()} className="gap-2">
           <Plus className="h-4 w-4" /> Add Task
         </Button>
       </div>
 
-      <div className="grid lg:grid-cols-5 gap-6">
+      <div className="grid lg:grid-cols-5 gap-8">
         {/* Left: Tasks */}
         <div className="lg:col-span-3 space-y-4">
           {/* Segmented control */}
-          <div className="flex gap-1 bg-muted rounded-lg p-1">
+          <div className="flex gap-1 rounded-lg bg-secondary p-1">
             {(['today', 'upcoming', 'all'] as Segment[]).map(s => (
               <button
                 key={s}
                 onClick={() => setSegment(s)}
                 className={`flex-1 px-3 py-1.5 text-sm rounded-md capitalize transition-colors ${
-                  segment === s ? 'bg-background text-foreground font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  segment === s ? 'bg-card text-foreground font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {s}
@@ -97,14 +97,14 @@ export default function PlanPage() {
           </form>
 
           {/* Task list */}
-          <div className="space-y-0.5">
+          <div className="divide-y divide-border">
             {filteredTasks.length === 0 && (
-              <div className="text-center py-10 text-sm text-muted-foreground">
+              <div className="text-center py-12 text-sm text-muted-foreground">
                 {segment === 'today' ? 'Nothing due today. Enjoy!' : 'No tasks found.'}
               </div>
             )}
             {filteredTasks.map(task => (
-              <div key={task.id} className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-card transition-colors group">
+              <div key={task.id} className="flex items-center gap-3 px-2 py-3 group">
                 <button
                   onClick={() => toggleTaskDone(task.id)}
                   className="h-4 w-4 rounded border border-border shrink-0 flex items-center justify-center hover:border-primary transition-colors"
@@ -134,25 +134,25 @@ export default function PlanPage() {
         {/* Right: Schedule */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Today's Schedule</h2>
+            <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Today's Schedule</h2>
             <button onClick={() => navigate('/calendar')} className="text-xs text-primary hover:underline">Open calendar</button>
           </div>
 
           {todayAgenda.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            <div className="py-10 text-center text-sm text-muted-foreground">
               Nothing scheduled today
             </div>
           ) : (
-            <div className="space-y-1.5">
+            <div className="divide-y divide-border">
               {todayAgenda.slice(0, 5).map(item => (
-                <div key={item.id} className="rounded-lg bg-card border border-border px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-sm flex-1">{item.title}</span>
+                <div key={item.id} className="flex items-center gap-3 py-2.5 px-1">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm">{item.title}</span>
+                    <p className="text-xs text-muted-foreground">
+                      {format(new Date(item.startDateTime), 'h:mm a')} – {format(new Date(item.endDateTime), 'h:mm a')}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground ml-5.5 mt-0.5">
-                    {format(new Date(item.startDateTime), 'h:mm a')} – {format(new Date(item.endDateTime), 'h:mm a')}
-                  </p>
                 </div>
               ))}
             </div>
