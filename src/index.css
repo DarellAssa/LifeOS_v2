@@ -7,22 +7,22 @@
 @layer base {
   :root {
     /* LifeOS — Warm, nature-inspired light theme */
-    --background: 40 33% 96%;          /* warm cream */
-    --foreground: 25 20% 16%;          /* warm near-black */
+    --background: 138 20% 95%;          /* soft sage green tint */
+    --foreground: 25 20% 16%;
 
-    --card: 40 30% 99%;                /* soft warm white */
+    --card: 138 15% 98%;                /* very subtle green-white */
     --card-foreground: 25 20% 16%;
 
-    --popover: 40 30% 99%;
+    --popover: 138 15% 98%;
     --popover-foreground: 25 20% 16%;
 
     --primary: 152 40% 38%;            /* sage green — nature */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 40 20% 93%;           /* warm beige */
+    --secondary: 138 15% 92%;           /* light green-gray */
     --secondary-foreground: 25 20% 16%;
 
-    --muted: 40 18% 93%;
+    --muted: 138 12% 92%;
     --muted-foreground: 25 10% 48%;
 
     --accent: 152 30% 92%;             /* light sage tint */
@@ -37,19 +37,19 @@
     --warning: 38 70% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 40 15% 88%;              /* warm light border */
-    --input: 40 15% 88%;
+    --border: 138 12% 87%;
+    --input: 138 12% 87%;
     --ring: 152 40% 38%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 40 25% 95%;
+    --sidebar-background: 138 18% 94%;
     --sidebar-foreground: 25 10% 42%;
     --sidebar-primary: 152 40% 38%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 152 25% 93%;
     --sidebar-accent-foreground: 152 40% 28%;
-    --sidebar-border: 40 15% 89%;
+    --sidebar-border: 138 12% 88%;
     --sidebar-ring: 152 40% 38%;
   }
 
