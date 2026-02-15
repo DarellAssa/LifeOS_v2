@@ -122,8 +122,10 @@ export function AppLayout() {
             onOpenCommandPalette={() => setCommandOpen(true)}
             onOpenCopilot={() => openCopilotWith()}
           />
-          <main className="flex-1 overflow-auto p-6 scrollbar-thin">
-            <Outlet />
+          <main className="flex-1 overflow-auto scrollbar-thin">
+            <div className="page-container">
+              <Outlet />
+            </div>
           </main>
         </div>
       </div>

@@ -1,7 +1,6 @@
-import { Search, Moon, Sun, Bell, Sparkles, User, LogOut, Settings as SettingsIcon, Leaf } from 'lucide-react';
+import { Search, Moon, Sun, Bell, Sparkles, User, LogOut, Settings as SettingsIcon } from 'lucide-react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { useTheme } from '@/hooks/useTheme';
 import { useAppContext } from '@/store/AppContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -57,11 +56,11 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
          <button
           data-tour="quick-capture"
           onClick={onOpenSearch}
-          className="flex h-9 w-full max-w-sm items-center gap-2 rounded-lg border border-input bg-card px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary"
+          className="flex h-9 w-full max-w-sm items-center gap-2 rounded-xl border border-input bg-card px-3.5 text-sm text-muted-foreground transition-all duration-150 hover:border-ring/30 hover:shadow-[0_0_0_3px_hsl(var(--ring)/0.08)] focus:border-ring/30 focus:shadow-[0_0_0_3px_hsl(var(--ring)/0.1)]"
         >
-          <Search className="h-4 w-4" />
+          <Search className="h-4 w-4 stroke-[1.5]" />
           <span>Search…</span>
-          <kbd className="ml-auto hidden rounded border border-border bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground sm:inline">
+          <kbd className="ml-auto hidden rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
             ⌘K
           </kbd>
         </button>
@@ -69,37 +68,37 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
 
       {/* Notification Bell */}
       <div className="relative" ref={bellRef}>
-        <Button variant="ghost" size="icon" onClick={() => setBellOpen(!bellOpen)} className="shrink-0 relative">
-          <Bell className="h-4 w-4" />
+        <Button variant="ghost" size="icon" onClick={() => setBellOpen(!bellOpen)} className="shrink-0 relative rounded-full h-9 w-9">
+          <Bell className="h-4 w-4 stroke-[1.5]" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-xs font-bold text-destructive-foreground">
+            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
         </Button>
 
         {bellOpen && (
-          <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-border bg-card shadow-lg z-50">
+          <div className="absolute right-0 top-full mt-2 w-80 rounded-2xl border border-border bg-card shadow-lg z-50">
             <div className="flex items-center justify-between p-3 border-b border-border">
               <span className="text-sm font-semibold">Notifications</span>
               <button onClick={() => { setBellOpen(false); navigate('/notifications'); }} className="text-xs text-primary hover:underline">View all</button>
             </div>
             <div className="max-h-72 overflow-y-auto">
               {recentNotifs.length === 0 && (
-                <p className="p-4 text-center text-xs text-muted-foreground">All clear! 🌿</p>
+                <p className="p-6 text-center text-xs text-muted-foreground">All clear! 🌿</p>
               )}
               {recentNotifs.map(n => (
                 <button key={n.id} onClick={() => {
                   if (!n.readAt) markNotificationRead(n.id);
                   if (n.action?.route) navigate(n.action.route);
                   setBellOpen(false);
-                }} className={`w-full text-left p-3 border-b border-border last:border-0 hover:bg-accent/50 transition-colors ${!n.readAt ? 'bg-primary/5' : ''}`}>
+                }} className={`w-full text-left px-3.5 py-3 border-b border-border last:border-0 hover:bg-accent/50 transition-colors ${!n.readAt ? 'bg-primary/5' : ''}`}>
                   <div className="flex items-center gap-2">
                     <div className={`h-2 w-2 rounded-full shrink-0 ${n.severity === 'critical' ? 'bg-destructive' : n.severity === 'warning' ? 'bg-warning' : 'bg-primary/50'}`} />
                     <p className="text-xs font-medium truncate flex-1">{n.title}</p>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate ml-4">{n.message}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 ml-4">{format(new Date(n.createdAt), 'h:mm a')}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 ml-4">{format(new Date(n.createdAt), 'h:mm a')}</p>
                 </button>
               ))}
             </div>
@@ -116,34 +115,34 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
       />
 
       {isModuleEnabled('copilot') && (
-        <Button variant="ghost" size="icon" onClick={onOpenCopilot} className="shrink-0" title="Open Copilot (Ctrl+J)">
-          <Sparkles className="h-4 w-4" />
+        <Button variant="ghost" size="icon" onClick={onOpenCopilot} className="shrink-0 rounded-full h-9 w-9" title="Open Copilot (Ctrl+J)">
+          <Sparkles className="h-4 w-4 stroke-[1.5]" />
         </Button>
       )}
 
-      <Button variant="ghost" size="icon" onClick={toggleTheme} className="shrink-0" title={`Theme: ${theme}`}>
-        {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      <Button variant="ghost" size="icon" onClick={toggleTheme} className="shrink-0 rounded-full h-9 w-9" title={`Theme: ${theme}`}>
+        {theme === 'dark' ? <Sun className="h-4 w-4 stroke-[1.5]" /> : <Moon className="h-4 w-4 stroke-[1.5]" />}
       </Button>
 
       {/* Profile Menu */}
       <div className="relative" ref={profileRef}>
-        <Button variant="ghost" size="icon" onClick={() => setProfileOpen(!profileOpen)} className="shrink-0">
-          <User className="h-4 w-4" />
+        <Button variant="ghost" size="icon" onClick={() => setProfileOpen(!profileOpen)} className="shrink-0 rounded-full h-9 w-9">
+          <User className="h-4 w-4 stroke-[1.5]" />
         </Button>
         {profileOpen && (
-          <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-border bg-card shadow-lg z-50">
-            <div className="p-3 border-b border-border">
+          <div className="absolute right-0 top-full mt-2 w-56 rounded-2xl border border-border bg-card shadow-lg z-50">
+            <div className="p-3.5 border-b border-border">
               <p className="text-sm font-medium truncate">{profile?.first_name || 'User'}</p>
               <p className="text-xs text-muted-foreground truncate">{profile?.email}</p>
             </div>
-            <div className="p-1">
+            <div className="p-1.5">
               <button onClick={() => { setProfileOpen(false); navigate('/settings'); }}
-                className="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm hover:bg-accent transition-colors">
-                <SettingsIcon className="h-4 w-4" /> Settings
+                className="flex items-center gap-2 w-full rounded-xl px-3 py-2 text-sm hover:bg-accent transition-colors">
+                <SettingsIcon className="h-4 w-4 stroke-[1.5]" /> Settings
               </button>
               <button onClick={handleSignOut}
-                className="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
-                <LogOut className="h-4 w-4" /> Sign out
+                className="flex items-center gap-2 w-full rounded-xl px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
+                <LogOut className="h-4 w-4 stroke-[1.5]" /> Sign out
               </button>
             </div>
           </div>
