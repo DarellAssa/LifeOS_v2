@@ -50,7 +50,7 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
   };
 
   return (
-    <header className="flex h-14 items-center gap-4 border-b border-border bg-background px-4">
+    <header className="relative flex h-14 items-center gap-4 border-b border-border bg-background px-4">
       <SidebarTrigger className="shrink-0" />
       <div className="flex flex-1 items-center gap-2">
          <button
@@ -71,7 +71,7 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
         <Button variant="ghost" size="icon" onClick={() => setBellOpen(!bellOpen)} className="shrink-0 relative rounded-full h-9 w-9">
           <Bell className="h-4 w-4 stroke-[1.5]" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[hsl(var(--attention))] text-[10px] font-bold text-white">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
@@ -92,9 +92,9 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
                   if (!n.readAt) markNotificationRead(n.id);
                   if (n.action?.route) navigate(n.action.route);
                   setBellOpen(false);
-                }} className={`w-full text-left px-3.5 py-3 border-b border-border last:border-0 hover:bg-accent/50 transition-colors ${!n.readAt ? 'bg-primary/5' : ''}`}>
+                }} className={`w-full text-left px-3.5 py-3 border-b border-border/50 last:border-0 hover:bg-accent/50 transition-colors ${!n.readAt ? 'bg-primary/5' : ''}`}>
                   <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full shrink-0 ${n.severity === 'critical' ? 'bg-destructive' : n.severity === 'warning' ? 'bg-warning' : 'bg-primary/50'}`} />
+                    <div className={`h-2 w-2 rounded-full shrink-0 ${n.severity === 'critical' ? 'bg-destructive' : n.severity === 'warning' ? 'bg-[hsl(var(--attention))]' : 'bg-primary/50'}`} />
                     <p className="text-xs font-medium truncate flex-1">{n.title}</p>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate ml-4">{n.message}</p>
@@ -148,6 +148,9 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
           </div>
         )}
       </div>
+
+      {/* LifeOS signature gradient divider */}
+      <div className="lifeos-divider absolute bottom-0 left-0 right-0" />
     </header>
   );
 }
