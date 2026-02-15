@@ -2,7 +2,7 @@ import { useMemo, useCallback, useState } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, Inbox, ArrowRight, ChevronDown, ChevronUp, Sparkles, Leaf, Calendar, AlertTriangle } from 'lucide-react';
+import { CheckSquare, Inbox, ArrowRight, ChevronDown, ChevronUp, Sparkles, Leaf, Calendar, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { DailyBriefingCard } from '@/components/DailyBriefingCard';
@@ -56,15 +56,13 @@ export default function TodayPage() {
 
   const showBriefingToggle = mergePreferences(profile?.preferences).briefing.show_on_dashboard && !hasNoData;
 
-  // Metrics for hero card
   const scheduledCount = todayAgenda.length;
   const remainingCount = todayTasks.filter(t => t.status !== 'done').length;
 
-  // Primary recommendation
   const heroAction = useMemo(() => {
-    if (overdue.length > 0) return { label: `Review ${overdue.length} overdue`, route: '/plan', variant: 'destructive' as const };
-    if (inboxCount > 0) return { label: `Triage inbox (${inboxCount})`, route: '/capture', variant: 'default' as const };
-    if (remainingCount > 0) return { label: 'Start next task', route: '/plan', variant: 'default' as const };
+    if (overdue.length > 0) return { label: `Review ${overdue.length} overdue`, route: '/plan', isOverdue: true };
+    if (inboxCount > 0) return { label: `Triage inbox (${inboxCount})`, route: '/capture', isOverdue: false };
+    if (remainingCount > 0) return { label: 'Start next task', route: '/plan', isOverdue: false };
     return null;
   }, [overdue, inboxCount, remainingCount]);
 
@@ -111,13 +109,14 @@ export default function TodayPage() {
       )}
 
       {!hasNoData && (
-        <div className="grid gap-6 lg:grid-cols-5">
-          {/* LEFT: Hero Focus Card — spans 3 cols */}
-          <div className="lg:col-span-3 space-y-6">
-            <div className="surface-hero p-6 space-y-5">
-              <div className="space-y-1">
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* MAIN COLUMN: Hero + Next Up */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Hero Focus Card */}
+            <div className="surface-hero p-6 sm:p-8 space-y-5">
+              <div className="space-y-1.5">
                 <p className="section-label">Today's Focus</p>
-                <p className="text-sm text-foreground">
+                <p className="text-sm text-foreground leading-relaxed">
                   {overdue.length > 0
                     ? `You have ${overdue.length} overdue item${overdue.length > 1 ? 's' : ''} to clear.`
                     : remainingCount > 0
@@ -127,35 +126,34 @@ export default function TodayPage() {
                 </p>
               </div>
 
-              {/* Metric chips */}
+              {/* Metric chips — calm amber for overdue */}
               <div className="flex flex-wrap gap-2">
                 {overdue.length > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-destructive/8 border border-destructive/15 px-3 py-1.5 text-xs text-destructive font-medium">
-                    <AlertTriangle className="h-3 w-3" />
+                  <div className="flex items-center gap-1.5 rounded-lg bg-[hsl(var(--attention-muted))] border border-[hsl(var(--attention)/0.2)] px-3 py-1.5 text-xs text-[hsl(var(--attention-foreground))] font-medium">
+                    <Clock className="h-3 w-3" />
                     {overdue.length} overdue
                   </div>
                 )}
                 {inboxCount > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-muted border border-border px-3 py-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5 rounded-lg bg-muted border border-border/50 px-3 py-1.5 text-xs text-muted-foreground">
                     <Inbox className="h-3 w-3" />
                     {inboxCount} inbox
                   </div>
                 )}
                 {scheduledCount > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-muted border border-border px-3 py-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5 rounded-lg bg-muted border border-border/50 px-3 py-1.5 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3" />
                     {scheduledCount} scheduled
                   </div>
                 )}
               </div>
 
-              {/* CTAs */}
+              {/* CTAs — overdue uses amber, not red */}
               <div className="flex flex-wrap gap-3">
                 {heroAction && (
                   <Button
                     onClick={() => navigate(heroAction.route)}
-                    variant={heroAction.variant === 'destructive' ? 'destructive' : 'default'}
-                    className="gap-2"
+                    className={`gap-2 ${heroAction.isOverdue ? 'bg-[hsl(var(--attention))] hover:bg-[hsl(var(--attention)/0.9)] text-white shadow-sm' : ''}`}
                   >
                     {heroAction.label}
                     <ArrowRight className="h-4 w-4" />
@@ -167,42 +165,18 @@ export default function TodayPage() {
               </div>
             </div>
 
-            {/* Schedule (inside left column, below hero) */}
-            {todayAgenda.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="section-label">Schedule</h2>
-                  <button onClick={() => navigate('/calendar')} className="text-xs text-primary hover:underline">Open calendar</button>
-                </div>
-                <div className="surface-1 divide-y divide-border overflow-hidden">
-                  {todayAgenda.slice(0, 5).map(item => (
-                    <div key={item.id} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors">
-                      <span className="text-xs text-muted-foreground w-16 shrink-0 tabular-nums">
-                        {format(new Date(item.startDateTime), 'h:mm a')}
-                      </span>
-                      <span className="text-sm flex-1">{item.title}</span>
-                      <span className="text-[10px] text-muted-foreground capitalize bg-muted px-2 py-0.5 rounded-md">{item.type}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-
-          {/* RIGHT: Next Up + Quick Capture — spans 2 cols */}
-          <div className="lg:col-span-2 space-y-6">
             {/* Next Up */}
             {nextActions.length > 0 && (
               <section className="space-y-3">
                 <h2 className="section-label">Next up</h2>
-                <div className="surface-1 divide-y divide-border overflow-hidden">
+                <div className="surface-1 divide-y divide-border/50 overflow-hidden">
                   {nextActions.map(item => (
                     <button
                       key={item.id}
                       onClick={() => navigate(item.route)}
-                      className="flex items-center gap-3 w-full px-4 py-3.5 text-left transition-all duration-150 hover:bg-accent/30 group"
+                      className="flex items-center gap-3 w-full px-4 py-3.5 text-left transition-all duration-150 hover:bg-accent/40 group"
                     >
-                      <div className={`h-2 w-2 rounded-full shrink-0 ${item.urgent ? 'bg-destructive' : 'bg-primary/40'}`} />
+                      <div className={`h-2 w-2 rounded-full shrink-0 ${item.urgent ? 'bg-[hsl(var(--attention))]' : 'bg-primary/40'}`} />
                       <span className="text-sm flex-1 truncate">{item.title}</span>
                       <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
@@ -211,34 +185,12 @@ export default function TodayPage() {
               </section>
             )}
 
-            {/* Quick Capture / Inbox */}
-            <section className="space-y-3">
-              <h2 className="section-label">Quick capture</h2>
-              <div className="surface-1 p-4 space-y-3">
-                <button
-                  onClick={() => navigate('/capture')}
-                  className="flex items-center gap-2 w-full rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground transition-all duration-150"
-                >
-                  <Inbox className="h-4 w-4" />
-                  <span>Capture something…</span>
-                </button>
-                {inboxCount > 0 && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Inbox: {inboxCount} item{inboxCount !== 1 ? 's' : ''}</span>
-                    <Button size="sm" variant="outline" onClick={() => navigate('/capture')} className="text-xs h-8">
-                      Triage
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </section>
-
             {/* Daily Briefing — collapsible */}
             {showBriefingToggle && (
               <section className="space-y-3">
                 <button
                   onClick={() => setBriefingOpen(!briefingOpen)}
-                  className="flex items-center gap-2.5 w-full text-left rounded-xl px-4 py-3 transition-all duration-150 hover:bg-accent/50 surface-2"
+                  className="flex items-center gap-2.5 w-full text-left rounded-2xl px-4 py-3 transition-all duration-150 hover:bg-accent/40 surface-2"
                 >
                   <Sparkles className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-sm font-medium flex-1">Daily Briefing</span>
@@ -251,6 +203,54 @@ export default function TodayPage() {
                 )}
               </section>
             )}
+          </div>
+
+          {/* RIGHT RAIL: Schedule + Inbox — only on lg+ */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Schedule today */}
+            {todayAgenda.length > 0 && (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="section-label">Schedule</h2>
+                  <button onClick={() => navigate('/calendar')} className="text-[11px] text-primary hover:underline">Calendar</button>
+                </div>
+                <div className="space-y-1">
+                  {todayAgenda.slice(0, 4).map(item => (
+                    <div key={item.id} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 hover:bg-accent/40 transition-colors">
+                      <div className="h-1.5 w-1.5 rounded-full bg-primary/50 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{item.title}</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">
+                          {format(new Date(item.startDateTime), 'h:mm a')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Quick Capture / Inbox */}
+            <section className="space-y-3">
+              <h2 className="section-label">Capture</h2>
+              <div className="space-y-2">
+                <button
+                  onClick={() => navigate('/capture')}
+                  className="flex items-center gap-2 w-full rounded-xl border border-dashed border-border/70 px-3.5 py-3 text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground hover:bg-accent/30 transition-all duration-150"
+                >
+                  <Inbox className="h-4 w-4 shrink-0" />
+                  <span>Capture something…</span>
+                </button>
+                {inboxCount > 0 && (
+                  <div className="flex items-center justify-between rounded-xl bg-accent/30 px-3.5 py-2.5 text-sm">
+                    <span className="text-muted-foreground text-xs">Inbox: {inboxCount}</span>
+                    <Button size="sm" variant="outline" onClick={() => navigate('/capture')} className="text-xs h-7 px-2.5">
+                      Triage
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         </div>
       )}

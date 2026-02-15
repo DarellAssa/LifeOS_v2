@@ -148,7 +148,7 @@ export function DailyBriefingCard({ onOpenCopilot }: DailyBriefingCardProps) {
   const m = briefing.metrics;
   const metricChips = [
     { label: 'Due today', value: m.tasks_due_today, icon: CheckSquare, show: m.tasks_due_today > 0 },
-    { label: 'Overdue', value: m.tasks_overdue, icon: AlertTriangle, show: m.tasks_overdue > 0, destructive: true },
+    { label: 'Overdue', value: m.tasks_overdue, icon: AlertTriangle, show: m.tasks_overdue > 0, attention: true },
     { label: 'Events', value: m.events_today, icon: Calendar, show: m.events_today > 0 },
     { label: 'Focus', value: `${m.focus_minutes_planned_today}m`, icon: Clock, show: m.focus_minutes_planned_today > 0 },
     { label: 'Inbox', value: m.inbox_unprocessed, icon: Inbox, show: m.inbox_unprocessed > 0 },
@@ -180,7 +180,7 @@ export function DailyBriefingCard({ onOpenCopilot }: DailyBriefingCardProps) {
         {metricChips.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {metricChips.map((chip, i) => (
-              <div key={i} className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${chip.destructive ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'border-border'}`}>
+              <div key={i} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs ${(chip as any).attention ? 'border-[hsl(var(--attention)/0.2)] bg-[hsl(var(--attention-muted))] text-[hsl(var(--attention-foreground))]' : 'border-border/50'}`}>
                 <chip.icon className="h-3 w-3" />
                 <span className="font-medium">{chip.value}</span>
                 <span className="text-muted-foreground">{chip.label}</span>
