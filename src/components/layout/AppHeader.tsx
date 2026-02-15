@@ -1,4 +1,4 @@
-import { Search, Moon, Sun, Bell, Sparkles, User, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { Search, Moon, Sun, Bell, Sparkles, User, LogOut, Settings as SettingsIcon, Leaf } from 'lucide-react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -57,11 +57,11 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
          <button
           data-tour="quick-capture"
           onClick={onOpenSearch}
-          className="flex h-9 w-full max-w-sm items-center gap-2 rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted"
+          className="flex h-9 w-full max-w-sm items-center gap-2 rounded-lg border border-input bg-card px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary"
         >
           <Search className="h-4 w-4" />
           <span>Search…</span>
-          <kbd className="ml-auto hidden rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
+          <kbd className="ml-auto hidden rounded border border-border bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground sm:inline">
             ⌘K
           </kbd>
         </button>
@@ -72,28 +72,28 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
         <Button variant="ghost" size="icon" onClick={() => setBellOpen(!bellOpen)} className="shrink-0 relative">
           <Bell className="h-4 w-4" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
+            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-xs font-bold text-destructive-foreground">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
         </Button>
 
         {bellOpen && (
-          <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-border bg-background shadow-lg z-50">
+          <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-border bg-card shadow-lg z-50">
             <div className="flex items-center justify-between p-3 border-b border-border">
               <span className="text-sm font-semibold">Notifications</span>
               <button onClick={() => { setBellOpen(false); navigate('/notifications'); }} className="text-xs text-primary hover:underline">View all</button>
             </div>
             <div className="max-h-72 overflow-y-auto">
               {recentNotifs.length === 0 && (
-                <p className="p-4 text-center text-xs text-muted-foreground">All clear!</p>
+                <p className="p-4 text-center text-xs text-muted-foreground">All clear! 🌿</p>
               )}
               {recentNotifs.map(n => (
                 <button key={n.id} onClick={() => {
                   if (!n.readAt) markNotificationRead(n.id);
                   if (n.action?.route) navigate(n.action.route);
                   setBellOpen(false);
-                }} className={`w-full text-left p-3 border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${!n.readAt ? 'bg-primary/5' : ''}`}>
+                }} className={`w-full text-left p-3 border-b border-border last:border-0 hover:bg-accent/50 transition-colors ${!n.readAt ? 'bg-primary/5' : ''}`}>
                   <div className="flex items-center gap-2">
                     <div className={`h-2 w-2 rounded-full shrink-0 ${n.severity === 'critical' ? 'bg-destructive' : n.severity === 'warning' ? 'bg-warning' : 'bg-primary/50'}`} />
                     <p className="text-xs font-medium truncate flex-1">{n.title}</p>
@@ -124,9 +124,6 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
       <Button variant="ghost" size="icon" onClick={toggleTheme} className="shrink-0" title={`Theme: ${theme}`}>
         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </Button>
-      {import.meta.env.DEV && (
-        <span className="text-xs text-muted-foreground font-mono">{theme}</span>
-      )}
 
       {/* Profile Menu */}
       <div className="relative" ref={profileRef}>
@@ -134,18 +131,18 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
           <User className="h-4 w-4" />
         </Button>
         {profileOpen && (
-          <div className="absolute right-0 top-full mt-2 w-56 rounded-lg border border-border bg-background shadow-lg z-50">
+          <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-border bg-card shadow-lg z-50">
             <div className="p-3 border-b border-border">
               <p className="text-sm font-medium truncate">{profile?.first_name || 'User'}</p>
-              <p className="text-[11px] text-muted-foreground truncate">{profile?.email}</p>
+              <p className="text-xs text-muted-foreground truncate">{profile?.email}</p>
             </div>
             <div className="p-1">
               <button onClick={() => { setProfileOpen(false); navigate('/settings'); }}
-                className="flex items-center gap-2 w-full rounded-md px-3 py-2 text-sm hover:bg-muted/50 transition-colors">
+                className="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm hover:bg-accent transition-colors">
                 <SettingsIcon className="h-4 w-4" /> Settings
               </button>
               <button onClick={handleSignOut}
-                className="flex items-center gap-2 w-full rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
+                className="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
                 <LogOut className="h-4 w-4" /> Sign out
               </button>
             </div>

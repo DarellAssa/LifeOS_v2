@@ -1,5 +1,5 @@
 import {
-  Sun, ClipboardList, Inbox, TrendingUp, MoreHorizontal,
+  Sun, ClipboardList, Inbox, TrendingUp, MoreHorizontal, Leaf,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -27,25 +27,28 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border" data-tour="sidebar">
-      <div className="flex h-14 items-center px-4 border-b border-sidebar-border">
+      <div className="flex h-14 items-center px-4 border-b border-sidebar-border gap-2">
         {!collapsed && (
-          <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
-            Life<span className="text-primary">OS</span>
+          <span className="flex items-center gap-2">
+            <Leaf className="h-5 w-5 text-primary" />
+            <span className="text-lg font-display font-semibold tracking-tight text-foreground">
+              Life<span className="text-primary">OS</span>
+            </span>
           </span>
         )}
-        {collapsed && <span className="text-lg font-bold text-primary mx-auto">L</span>}
+        {collapsed && <Leaf className="h-5 w-5 text-primary mx-auto" />}
       </div>
-      <SidebarContent className="pt-4">
+      <SidebarContent className="pt-6">
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-1">
+            <SidebarMenu className="space-y-1 px-2">
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
                       end={item.url === '/'}
-                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                       data-tour={
                         item.title === 'Capture' ? 'nav-inbox' :
@@ -58,7 +61,7 @@ export function AppSidebar() {
                         <span className="flex items-center gap-2 flex-1">
                           {item.title}
                           {item.title === 'Capture' && inboxCount > 0 && (
-                            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 ml-auto font-normal">
+                            <Badge variant="secondary" className="text-xs h-5 px-1.5 ml-auto font-normal bg-primary/10 text-primary border-0">
                               {inboxCount}
                             </Badge>
                           )}
