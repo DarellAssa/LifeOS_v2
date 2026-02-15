@@ -2,7 +2,7 @@ import { useMemo, useCallback, useState } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, Inbox, ArrowRight, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { CheckSquare, Inbox, ArrowRight, ChevronDown, ChevronUp, Sparkles, Leaf } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { DailyBriefingCard } from '@/components/DailyBriefingCard';
@@ -34,12 +34,10 @@ export default function TodayPage() {
     window.dispatchEvent(new CustomEvent('open-copilot', { detail: { message } }));
   }, []);
 
-  // Status line
   const statusLine = useMemo(() => {
     if (hasNoData) return null;
     const remaining = todayTasks.filter(t => t.status !== 'done').length;
-    const needsAttention = overdue.length + (inboxCount > 0 ? 1 : 0);
-    if (needsAttention === 0 && remaining === 0) return "You're all set for today.";
+    if (overdue.length === 0 && remaining === 0 && inboxCount === 0) return "You're all set for today. 🌿";
     const parts: string[] = [];
     if (overdue.length > 0) parts.push(`${overdue.length} overdue`);
     if (remaining > 0) parts.push(`${remaining} tasks remaining`);
@@ -47,7 +45,6 @@ export default function TodayPage() {
     return parts.join(' · ');
   }, [overdue, todayTasks, inboxCount, hasNoData]);
 
-  // Next actions — max 3 most important items
   const nextActions = useMemo(() => {
     const items: { id: string; title: string; type: string; route: string; urgent?: boolean }[] = [];
     overdue.slice(0, 2).forEach(t => items.push({ id: t.id, title: t.title, type: 'task', route: '/plan', urgent: true }));
@@ -60,29 +57,34 @@ export default function TodayPage() {
   const showBriefingToggle = mergePreferences(profile?.preferences).briefing.show_on_dashboard && !hasNoData;
 
   return (
-    <div className="max-w-xl mx-auto space-y-8 py-2" data-tour="dashboard-header">
+    <div className="max-w-xl mx-auto space-y-8 py-4" data-tour="dashboard-header">
       {/* Header */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Good {greeting}{userName ? `, ${userName}` : ''}
+      <div className="space-y-1.5">
+        <h1 className="text-2xl font-display font-semibold tracking-tight text-foreground">
+          Good {greeting}{userName ? `, ${userName}` : ''} ☀️
         </h1>
         <p className="text-muted-foreground">{format(new Date(), 'EEEE, MMMM d')}</p>
       </div>
 
       {/* Empty state */}
       {hasNoData && (
-        <div className="rounded-xl border border-dashed border-border py-14 px-8 text-center space-y-6">
+        <div className="rounded-2xl border border-dashed border-primary/20 bg-accent/50 py-14 px-8 text-center space-y-6">
+          <div className="flex justify-center">
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Leaf className="h-6 w-6 text-primary" />
+            </div>
+          </div>
           <div className="space-y-2">
-            <h2 className="text-lg font-medium">Welcome to LifeOS</h2>
+            <h2 className="text-lg font-display font-medium">Welcome to LifeOS</h2>
             <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-              Your system starts clean. Add something to get going.
+              A calm space to organize your life. Start by capturing a thought or adding your first task.
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-3">
-            <Button onClick={() => navigate('/capture')} className="gap-2">
+            <Button onClick={() => navigate('/capture')} className="gap-2 rounded-xl">
               <Inbox className="h-4 w-4" /> Capture your first thing
             </Button>
-            <Button variant="outline" onClick={() => navigate('/plan')} className="gap-2">
+            <Button variant="outline" onClick={() => navigate('/plan')} className="gap-2 rounded-xl">
               <CheckSquare className="h-4 w-4" /> Add your first task
             </Button>
           </div>
@@ -97,7 +99,7 @@ export default function TodayPage() {
         <>
           {/* Status line */}
           {statusLine && (
-            <p className="text-sm text-muted-foreground -mt-4">{statusLine}</p>
+            <p className="text-sm text-muted-foreground">{statusLine}</p>
           )}
 
           {/* Collapsible Daily Briefing */}
@@ -105,7 +107,7 @@ export default function TodayPage() {
             <div>
               <button
                 onClick={() => setBriefingOpen(!briefingOpen)}
-                className="flex items-center gap-2 w-full text-left rounded-lg px-4 py-3 transition-colors hover:bg-secondary"
+                className="flex items-center gap-2.5 w-full text-left rounded-xl px-4 py-3 transition-all duration-200 hover:bg-accent"
               >
                 <Sparkles className="h-4 w-4 text-primary shrink-0" />
                 <span className="text-sm font-medium flex-1">Daily Briefing</span>
@@ -129,16 +131,16 @@ export default function TodayPage() {
           {nextActions.length > 0 && (
             <section className="space-y-3">
               <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Next up</h2>
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {nextActions.map(item => (
                   <button
                     key={item.id}
                     onClick={() => navigate(item.route)}
-                    className="flex items-center gap-3 w-full rounded-lg px-4 py-3.5 text-left transition-colors hover:bg-secondary"
+                    className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-left transition-all duration-200 hover:bg-accent group"
                   >
-                    <div className={`h-2 w-2 rounded-full shrink-0 ${item.urgent ? 'bg-destructive' : 'bg-primary/40'}`} />
-                    <span className="text-sm flex-1">{item.title}</span>
-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${item.urgent ? 'bg-destructive' : 'bg-primary/50'}`} />
+                    <span className="text-sm flex-1 group-hover:text-foreground">{item.title}</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </button>
                 ))}
               </div>
@@ -152,10 +154,10 @@ export default function TodayPage() {
                 <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Schedule</h2>
                 <button onClick={() => navigate('/calendar')} className="text-xs text-primary hover:underline">Open calendar</button>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {todayAgenda.slice(0, 5).map(item => (
-                  <div key={item.id} className="flex items-center gap-3 rounded-lg px-4 py-2.5">
-                    <span className="text-xs text-muted-foreground w-16 shrink-0">
+                  <div key={item.id} className="flex items-center gap-3 rounded-xl px-4 py-2.5">
+                    <span className="text-xs text-muted-foreground w-16 shrink-0 tabular-nums">
                       {format(new Date(item.startDateTime), 'h:mm a')}
                     </span>
                     <span className="text-sm flex-1">{item.title}</span>
@@ -168,12 +170,12 @@ export default function TodayPage() {
 
           {/* Inbox summary */}
           {inboxCount > 0 && (
-            <section className="flex items-center justify-between rounded-lg px-4 py-3">
+            <section className="flex items-center justify-between rounded-xl bg-accent/50 px-4 py-3">
               <div className="flex items-center gap-2">
                 <Inbox className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">{inboxCount} unprocessed item{inboxCount !== 1 ? 's' : ''}</span>
               </div>
-              <Button size="sm" variant="outline" onClick={() => navigate('/capture')}>
+              <Button size="sm" variant="outline" onClick={() => navigate('/capture')} className="rounded-lg">
                 Capture
               </Button>
             </section>

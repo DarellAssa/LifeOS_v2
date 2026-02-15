@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,28 +6,29 @@
 
 @layer base {
   :root {
-    --background: 30 20% 97%;
-    --foreground: 222 47% 11%;
+    /* LifeOS — Warm, nature-inspired light theme */
+    --background: 40 33% 96%;          /* warm cream */
+    --foreground: 25 20% 16%;          /* warm near-black */
 
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card: 40 30% 99%;                /* soft warm white */
+    --card-foreground: 25 20% 16%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover: 40 30% 99%;
+    --popover-foreground: 25 20% 16%;
 
-    --primary: 243 75% 59%;
+    --primary: 152 40% 38%;            /* sage green — nature */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 40 20% 93%;           /* warm beige */
+    --secondary-foreground: 25 20% 16%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 40 18% 93%;
+    --muted-foreground: 25 10% 48%;
 
-    --accent: 220 14% 96%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 152 30% 92%;             /* light sage tint */
+    --accent-foreground: 152 40% 28%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 60% 50%;
     --destructive-foreground: 0 0% 100%;
 
     --success: 152 45% 42%;
@@ -36,43 +37,43 @@
     --warning: 38 70% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 243 75% 59%;
+    --border: 40 15% 88%;              /* warm light border */
+    --input: 40 15% 88%;
+    --ring: 152 40% 38%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 30 15% 96%;
-    --sidebar-foreground: 215 16% 47%;
-    --sidebar-primary: 243 75% 59%;
+    --sidebar-background: 40 25% 95%;
+    --sidebar-foreground: 25 10% 42%;
+    --sidebar-primary: 152 40% 38%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 243 30% 96%;
-    --sidebar-accent-foreground: 243 60% 45%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 243 75% 59%;
+    --sidebar-accent: 152 25% 93%;
+    --sidebar-accent-foreground: 152 40% 28%;
+    --sidebar-border: 40 15% 89%;
+    --sidebar-ring: 152 40% 38%;
   }
 
   .dark {
-    --background: 225 18% 9%;
-    --foreground: 220 12% 88%;
+    --background: 30 10% 10%;
+    --foreground: 40 15% 85%;
 
-    --card: 225 16% 12%;
-    --card-foreground: 220 12% 88%;
+    --card: 30 10% 13%;
+    --card-foreground: 40 15% 85%;
 
-    --popover: 225 16% 12%;
-    --popover-foreground: 220 12% 88%;
+    --popover: 30 10% 13%;
+    --popover-foreground: 40 15% 85%;
 
-    --primary: 243 60% 65%;
+    --primary: 152 35% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 225 14% 16%;
-    --secondary-foreground: 220 12% 88%;
+    --secondary: 30 10% 16%;
+    --secondary-foreground: 40 15% 85%;
 
-    --muted: 225 14% 16%;
-    --muted-foreground: 220 10% 52%;
+    --muted: 30 10% 16%;
+    --muted-foreground: 40 8% 52%;
 
-    --accent: 225 14% 18%;
-    --accent-foreground: 220 12% 88%;
+    --accent: 152 20% 18%;
+    --accent-foreground: 152 35% 65%;
 
     --destructive: 0 50% 48%;
     --destructive-foreground: 0 0% 100%;
@@ -83,18 +84,18 @@
     --warning: 38 65% 48%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 225 14% 18%;
-    --input: 225 14% 18%;
-    --ring: 243 60% 65%;
+    --border: 30 10% 18%;
+    --input: 30 10% 18%;
+    --ring: 152 35% 50%;
 
-    --sidebar-background: 225 18% 8%;
-    --sidebar-foreground: 220 8% 58%;
-    --sidebar-primary: 243 60% 65%;
+    --sidebar-background: 30 10% 9%;
+    --sidebar-foreground: 40 8% 55%;
+    --sidebar-primary: 152 35% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 243 30% 14%;
-    --sidebar-accent-foreground: 243 45% 68%;
-    --sidebar-border: 225 14% 15%;
-    --sidebar-ring: 243 60% 65%;
+    --sidebar-accent: 152 20% 14%;
+    --sidebar-accent-foreground: 152 35% 60%;
+    --sidebar-border: 30 10% 15%;
+    --sidebar-ring: 152 35% 50%;
   }
 }
 
@@ -115,5 +116,9 @@
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--muted)) transparent;
+  }
+
+  .font-display {
+    font-family: 'Fraunces', Georgia, serif;
   }
 }
