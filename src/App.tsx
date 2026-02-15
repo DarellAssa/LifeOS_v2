@@ -7,7 +7,11 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AppProvider } from "@/store/AppContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
-import Dashboard from "@/pages/Dashboard";
+import TodayPage from "@/pages/TodayPage";
+import PlanPage from "@/pages/PlanPage";
+import CapturePage from "@/pages/CapturePage";
+import ProgressPage from "@/pages/ProgressPage";
+import MorePage from "@/pages/MorePage";
 import Tasks from "@/pages/Tasks";
 import Goals from "@/pages/Goals";
 import CalendarPage from "@/pages/CalendarPage";
@@ -78,7 +82,13 @@ const App = () => (
                   </AppProvider>
                 </ProtectedRoute>
               }>
-                <Route path="/" element={<Dashboard />} />
+                {/* Primary nav */}
+                <Route path="/" element={<TodayPage />} />
+                <Route path="/plan" element={<PlanPage />} />
+                <Route path="/capture" element={<CapturePage />} />
+                <Route path="/progress" element={<ProgressPage />} />
+                <Route path="/more" element={<MorePage />} />
+                {/* All existing routes accessible via More */}
                 <Route path="/tasks" element={<Tasks />} />
                 <Route path="/goals" element={<Goals />} />
                 <Route path="/calendar" element={<CalendarPage />} />
