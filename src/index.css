@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    /* LifeOS — Warm neutral + muted indigo accent */
+    /* LifeOS — Warm neutral + muted indigo */
     --background: 30 33% 97%;           /* warm off-white */
     --foreground: 222 47% 11%;          /* slate-900 */
 
@@ -28,22 +28,28 @@
     --accent: 243 75% 96%;             /* very light indigo tint */
     --accent-foreground: 243 75% 25%;
 
-    --destructive: 0 55% 48%;          /* muted red, not neon */
+    --destructive: 0 55% 48%;          /* muted red */
     --destructive-foreground: 0 0% 100%;
 
     --success: 152 45% 42%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 60% 50%;
+    --warning: 38 55% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 220 13% 90%;             /* clearer separation */
+    --border: 220 13% 90%;
     --input: 220 13% 90%;
     --ring: 243 75% 59%;
 
     --radius: 14px;
 
-    --sidebar-background: 30 33% 97%;
+    /* Surface system */
+    --surface-1: 0 0% 100%;           /* cards — white */
+    --surface-2: 220 14% 97%;         /* secondary panels — tinted neutral */
+    --shadow-surface: 0 0% 0% / 0.04;
+    --shadow-surface-lg: 0 0% 0% / 0.06;
+
+    --sidebar-background: 220 14% 97%;
     --sidebar-foreground: 215 16% 40%;
     --sidebar-primary: 243 75% 59%;
     --sidebar-primary-foreground: 0 0% 100%;
@@ -88,6 +94,11 @@
     --input: 30 10% 18%;
     --ring: 152 35% 50%;
 
+    --surface-1: 30 10% 13%;
+    --surface-2: 30 10% 11%;
+    --shadow-surface: 0 0% 0% / 0.2;
+    --shadow-surface-lg: 0 0% 0% / 0.3;
+
     --sidebar-background: 30 10% 9%;
     --sidebar-foreground: 40 8% 55%;
     --sidebar-primary: 152 35% 50%;
@@ -109,6 +120,19 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     font-size: 15px;
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Global transitions */
+  button, a, [role="button"] {
+    transition: all 150ms ease-out;
+  }
+
+  /* Premium focus ring */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring) / 0.4);
   }
 }
 
@@ -120,5 +144,56 @@
 
   .font-display {
     font-family: 'Fraunces', Georgia, serif;
+  }
+
+  /* Surface system utilities */
+  .surface-1 {
+    background: hsl(var(--surface-1));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 3px hsl(var(--shadow-surface)), 0 1px 2px -1px hsl(var(--shadow-surface));
+    border-radius: 16px;
+  }
+
+  .surface-2 {
+    background: hsl(var(--surface-2));
+    border: 1px solid hsl(var(--border) / 0.5);
+    border-radius: 16px;
+  }
+
+  .surface-hero {
+    background: linear-gradient(135deg, hsl(var(--surface-1)), hsl(var(--accent) / 0.4));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 4px 12px hsl(var(--shadow-surface-lg)), 0 1px 3px hsl(var(--shadow-surface));
+    border-radius: 16px;
+  }
+
+  /* Section label */
+  .section-label {
+    @apply text-xs font-medium uppercase tracking-widest text-muted-foreground;
+    letter-spacing: 0.08em;
+  }
+
+  /* Page title */
+  .page-title {
+    @apply font-display font-semibold text-foreground tracking-tight;
+    font-size: clamp(28px, 4vw, 36px);
+  }
+
+  /* Page container */
+  .page-container {
+    @apply mx-auto px-4 sm:px-8 py-6 sm:py-8;
+    max-width: 1060px;
+  }
+
+  /* Hover press effect */
+  .hover-press {
+    @apply transition-all duration-150 ease-out;
+  }
+  .hover-press:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px hsl(var(--shadow-surface-lg));
+  }
+  .hover-press:active {
+    transform: translateY(0px) scale(0.99);
   }
 }
