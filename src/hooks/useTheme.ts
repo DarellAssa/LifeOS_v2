@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 
-// Ensure light is default on very first load — run immediately
+// Force light on every fresh module load — clear any stale dark preference
 if (typeof window !== 'undefined') {
   const stored = localStorage.getItem('lifeos-theme');
-  if (stored !== 'dark') {
-    document.documentElement.classList.remove('dark');
-  } else {
+  if (stored === 'dark') {
+    // User explicitly chose dark previously — respect it
     document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem('lifeos-theme', 'light');
   }
 }
 
