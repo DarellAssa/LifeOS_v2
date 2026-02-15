@@ -1,12 +1,22 @@
 import { useState, useEffect } from 'react';
 
+// Ensure light is default on very first load — run immediately
+if (typeof window !== 'undefined') {
+  const stored = localStorage.getItem('lifeos-theme');
+  if (stored !== 'dark') {
+    document.documentElement.classList.remove('dark');
+  } else {
+    document.documentElement.classList.add('dark');
+  }
+}
+
 export function useTheme() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('lifeos-theme');
-      if (stored === 'dark' || stored === 'light') return stored;
+      if (stored === 'dark') return 'dark';
     }
-    return 'light'; // Always default to light
+    return 'light';
   });
 
   useEffect(() => {

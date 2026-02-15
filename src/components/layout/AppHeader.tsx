@@ -121,9 +121,12 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
         </Button>
       )}
 
-      <Button variant="ghost" size="icon" onClick={toggleTheme} className="shrink-0">
+      <Button variant="ghost" size="icon" onClick={toggleTheme} className="shrink-0" title={`Theme: ${theme}`}>
         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </Button>
+      {import.meta.env.DEV && (
+        <span className="text-xs text-muted-foreground font-mono">{theme}</span>
+      )}
 
       {/* Profile Menu */}
       <div className="relative" ref={profileRef}>
