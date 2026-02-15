@@ -1,8 +1,8 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, Inbox, ArrowRight, Calendar, Sparkles } from 'lucide-react';
+import { CheckSquare, Inbox, ArrowRight, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { DailyBriefingCard } from '@/components/DailyBriefingCard';
@@ -16,13 +16,13 @@ export default function TodayPage() {
   const { profile, isModuleEnabled } = useAuth();
   const navigate = useNavigate();
   const { tasks, goals, habits } = data;
+  const [briefingOpen, setBriefingOpen] = useState(false);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayTasks = getTodayTasks();
   const overdue = getOverdueTasks();
   const todayAgenda = useMemo(() => getAgendaForDay(todayStr), [getAgendaForDay, todayStr]);
   const inboxCount = data.inboxItems.filter(i => i.status === 'unprocessed').length;
-  const doneToday = tasks.filter(t => t.completedAt && format(new Date(t.completedAt), 'yyyy-MM-dd') === todayStr);
 
   const hasNoData = tasks.length === 0 && goals.length === 0 && habits.length === 0 && data.events.length === 0;
 
@@ -36,12 +36,13 @@ export default function TodayPage() {
 
   // Status line
   const statusLine = useMemo(() => {
-    const needsAttention = overdue.length + (inboxCount > 0 ? 1 : 0);
     if (hasNoData) return null;
-    if (needsAttention === 0 && todayTasks.filter(t => t.status !== 'done').length === 0) return "You're all set for today.";
+    const remaining = todayTasks.filter(t => t.status !== 'done').length;
+    const needsAttention = overdue.length + (inboxCount > 0 ? 1 : 0);
+    if (needsAttention === 0 && remaining === 0) return "You're all set for today.";
     const parts: string[] = [];
     if (overdue.length > 0) parts.push(`${overdue.length} overdue`);
-    if (todayTasks.filter(t => t.status !== 'done').length > 0) parts.push(`${todayTasks.filter(t => t.status !== 'done').length} tasks remaining`);
+    if (remaining > 0) parts.push(`${remaining} tasks remaining`);
     if (inboxCount > 0) parts.push(`${inboxCount} in inbox`);
     return parts.join(' · ');
   }, [overdue, todayTasks, inboxCount, hasNoData]);
@@ -49,17 +50,17 @@ export default function TodayPage() {
   // Next actions — max 3 most important items
   const nextActions = useMemo(() => {
     const items: { id: string; title: string; type: string; route: string; urgent?: boolean }[] = [];
-    // Overdue tasks first
     overdue.slice(0, 2).forEach(t => items.push({ id: t.id, title: t.title, type: 'task', route: '/plan', urgent: true }));
-    // Today tasks
     todayTasks.filter(t => t.status !== 'done' && !overdue.find(o => o.id === t.id)).slice(0, 3 - items.length).forEach(t =>
       items.push({ id: t.id, title: t.title, type: 'task', route: '/plan' })
     );
     return items.slice(0, 3);
   }, [overdue, todayTasks]);
 
+  const showBriefingToggle = mergePreferences(profile?.preferences).briefing.show_on_dashboard && !hasNoData;
+
   return (
-    <div className="max-w-2xl mx-auto space-y-8" data-tour="dashboard-header">
+    <div className="max-w-xl mx-auto space-y-8 py-2" data-tour="dashboard-header">
       {/* Header */}
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">
@@ -70,10 +71,10 @@ export default function TodayPage() {
 
       {/* Empty state */}
       {hasNoData && (
-        <div className="rounded-xl border border-dashed border-border p-10 text-center space-y-5">
+        <div className="rounded-xl border border-dashed border-border py-14 px-8 text-center space-y-6">
           <div className="space-y-2">
             <h2 className="text-lg font-medium">Welcome to LifeOS</h2>
-            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            <p className="text-sm text-muted-foreground max-w-xs mx-auto">
               Your system starts clean. Add something to get going.
             </p>
           </div>
@@ -86,7 +87,8 @@ export default function TodayPage() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Want to explore with sample data? <button onClick={() => navigate('/settings')} className="text-primary hover:underline">Try demo mode</button>
+            Want to explore with sample data?{' '}
+            <button onClick={() => navigate('/settings')} className="text-primary hover:underline">Try demo mode</button>
           </p>
         </div>
       )}
@@ -95,12 +97,32 @@ export default function TodayPage() {
         <>
           {/* Status line */}
           {statusLine && (
-            <p className="text-sm text-muted-foreground">{statusLine}</p>
+            <p className="text-sm text-muted-foreground -mt-4">{statusLine}</p>
           )}
 
-          {/* AI Briefing */}
-          {mergePreferences(profile?.preferences).briefing.show_on_dashboard && (
-            <DailyBriefingCard onOpenCopilot={handleOpenCopilot} />
+          {/* Collapsible Daily Briefing */}
+          {showBriefingToggle && (
+            <div>
+              <button
+                onClick={() => setBriefingOpen(!briefingOpen)}
+                className="flex items-center gap-2 w-full text-left rounded-lg px-4 py-3 transition-colors hover:bg-secondary"
+              >
+                <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-sm font-medium flex-1">Daily Briefing</span>
+                {overdue.length > 0 && (
+                  <span className="text-xs text-destructive font-medium">{overdue.length} overdue</span>
+                )}
+                {inboxCount > 0 && (
+                  <span className="text-xs text-muted-foreground">{inboxCount} inbox</span>
+                )}
+                {briefingOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+              </button>
+              {briefingOpen && (
+                <div className="mt-2">
+                  <DailyBriefingCard onOpenCopilot={handleOpenCopilot} />
+                </div>
+              )}
+            </div>
           )}
 
           {/* Next Actions */}
@@ -112,7 +134,7 @@ export default function TodayPage() {
                   <button
                     key={item.id}
                     onClick={() => navigate(item.route)}
-                    className="flex items-center gap-3 w-full rounded-lg px-4 py-3 text-left transition-colors hover:bg-card border border-transparent hover:border-border"
+                    className="flex items-center gap-3 w-full rounded-lg px-4 py-3.5 text-left transition-colors hover:bg-secondary"
                   >
                     <div className={`h-2 w-2 rounded-full shrink-0 ${item.urgent ? 'bg-destructive' : 'bg-primary/40'}`} />
                     <span className="text-sm flex-1">{item.title}</span>
@@ -132,8 +154,8 @@ export default function TodayPage() {
               </div>
               <div className="space-y-1">
                 {todayAgenda.slice(0, 5).map(item => (
-                  <div key={item.id} className="flex items-center gap-3 rounded-lg px-4 py-2.5 bg-card border border-border">
-                    <span className="text-xs text-muted-foreground w-14 shrink-0">
+                  <div key={item.id} className="flex items-center gap-3 rounded-lg px-4 py-2.5">
+                    <span className="text-xs text-muted-foreground w-16 shrink-0">
                       {format(new Date(item.startDateTime), 'h:mm a')}
                     </span>
                     <span className="text-sm flex-1">{item.title}</span>
@@ -146,7 +168,7 @@ export default function TodayPage() {
 
           {/* Inbox summary */}
           {inboxCount > 0 && (
-            <section className="flex items-center justify-between rounded-lg bg-card border border-border px-4 py-3">
+            <section className="flex items-center justify-between rounded-lg px-4 py-3">
               <div className="flex items-center gap-2">
                 <Inbox className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">{inboxCount} unprocessed item{inboxCount !== 1 ? 's' : ''}</span>
@@ -156,22 +178,6 @@ export default function TodayPage() {
               </Button>
             </section>
           )}
-
-          {/* Quick stats */}
-          <div className="flex gap-4 text-center">
-            <div className="flex-1 rounded-lg bg-card border border-border p-3">
-              <p className="text-2xl font-semibold">{doneToday.length}</p>
-              <p className="text-xs text-muted-foreground">Done today</p>
-            </div>
-            <div className="flex-1 rounded-lg bg-card border border-border p-3">
-              <p className="text-2xl font-semibold">{todayTasks.filter(t => t.status !== 'done').length}</p>
-              <p className="text-xs text-muted-foreground">Remaining</p>
-            </div>
-            <div className="flex-1 rounded-lg bg-card border border-border p-3">
-              <p className="text-2xl font-semibold">{todayAgenda.length}</p>
-              <p className="text-xs text-muted-foreground">Scheduled</p>
-            </div>
-          </div>
         </>
       )}
     </div>
