@@ -6,87 +6,90 @@
 
 @layer base {
   :root {
-    /* LifeOS Material — Cool neutral + refined indigo */
-    --background: 225 14% 96%;           /* cool light gray, not white */
-    --foreground: 222 47% 11%;
+    /* LifeOS Brand — Warm paper + sunrise accent */
+    --background: 36 25% 97%;            /* warm paper (#F9F7F4 vibe) */
+    --foreground: 230 25% 14%;            /* warm near-black */
 
-    --card: 0 0% 100%;                   /* true white cards */
-    --card-foreground: 222 47% 11%;
+    --card: 36 20% 99.5%;                 /* warm white cards */
+    --card-foreground: 230 25% 14%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover: 36 20% 99.5%;
+    --popover-foreground: 230 25% 14%;
 
-    --primary: 243 60% 55%;              /* refined indigo, less saturated */
+    --primary: 24 85% 56%;                /* warm sunrise CTA */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 36 15% 94%;              /* soft warm neutral */
+    --secondary-foreground: 230 25% 14%;
 
-    --muted: 220 12% 93%;
-    --muted-foreground: 215 14% 45%;
+    --muted: 36 12% 93%;                  /* warm muted */
+    --muted-foreground: 230 10% 46%;      /* warm readable gray */
 
-    --accent: 243 40% 95%;
-    --accent-foreground: 243 50% 30%;
+    --accent: 250 35% 95%;                /* lavender mist */
+    --accent-foreground: 250 40% 35%;
 
-    --destructive: 0 55% 48%;
+    --destructive: 0 60% 50%;
     --destructive-foreground: 0 0% 100%;
 
     --attention: 30 80% 52%;
     --attention-foreground: 30 90% 18%;
     --attention-muted: 30 70% 95%;
 
-    --success: 152 45% 42%;
+    --success: 152 40% 44%;
     --success-foreground: 0 0% 100%;
 
     --warning: 38 55% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 220 10% 90%;
-    --input: 220 12% 93%;
-    --ring: 243 60% 55%;
+    --border: 36 12% 89%;                 /* warm subtle border */
+    --input: 36 15% 92%;                  /* warm input bg */
+    --ring: 24 85% 56%;                   /* matches primary */
 
-    --radius: 16px;
+    --radius: 14px;
 
-    /* Surface layers — the key to "OS" feel */
-    --surface-1: 0 0% 100%;             /* cards: white */
-    --surface-2: 225 12% 97.5%;         /* panels: barely tinted */
-    --shadow-color: 220 20% 50%;
-    --shadow-sm: 0 1px 2px hsl(220 20% 50% / 0.06);
-    --shadow-md: 0 2px 8px -1px hsl(220 20% 50% / 0.08), 0 1px 3px hsl(220 20% 50% / 0.06);
-    --shadow-lg: 0 4px 16px -2px hsl(220 20% 50% / 0.1), 0 2px 6px hsl(220 20% 50% / 0.06);
-    --shadow-hover: 0 8px 24px -4px hsl(220 20% 50% / 0.12), 0 2px 8px hsl(220 20% 50% / 0.06);
+    /* Surface layers */
+    --surface-1: 36 20% 99.5%;            /* card white */
+    --surface-2: 36 18% 96%;              /* panel tint */
 
-    --sidebar-background: 225 12% 97.5%;
-    --sidebar-foreground: 215 14% 45%;
-    --sidebar-primary: 243 60% 55%;
+    /* Shadows — warm tone */
+    --shadow-sm: 0 1px 2px hsl(30 15% 40% / 0.05);
+    --shadow-md: 0 1px 3px hsl(30 15% 40% / 0.06), 0 4px 12px -2px hsl(30 15% 40% / 0.06);
+    --shadow-lg: 0 2px 6px hsl(30 15% 40% / 0.07), 0 8px 24px -4px hsl(30 15% 40% / 0.08);
+
+    /* Brand gradient — use behind Today/Plan headers */
+    --brand-gradient: radial-gradient(ellipse 80% 60% at 50% 0%, hsl(24 85% 56% / 0.06) 0%, transparent 70%);
+
+    --sidebar-background: 36 18% 96%;
+    --sidebar-foreground: 230 10% 46%;
+    --sidebar-primary: 24 85% 56%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 243 40% 95%;
-    --sidebar-accent-foreground: 243 50% 30%;
-    --sidebar-border: 220 10% 92%;
-    --sidebar-ring: 243 60% 55%;
+    --sidebar-accent: 250 35% 95%;
+    --sidebar-accent-foreground: 250 40% 35%;
+    --sidebar-border: 36 12% 90%;
+    --sidebar-ring: 24 85% 56%;
   }
 
   .dark {
-    --background: 225 15% 8%;
-    --foreground: 210 15% 85%;
+    --background: 230 18% 9%;
+    --foreground: 36 15% 85%;
 
-    --card: 225 12% 12%;
-    --card-foreground: 210 15% 85%;
+    --card: 230 15% 12%;
+    --card-foreground: 36 15% 85%;
 
-    --popover: 225 12% 12%;
-    --popover-foreground: 210 15% 85%;
+    --popover: 230 15% 12%;
+    --popover-foreground: 36 15% 85%;
 
-    --primary: 243 50% 62%;
+    --primary: 24 80% 58%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 225 12% 15%;
-    --secondary-foreground: 210 15% 85%;
+    --secondary: 230 15% 15%;
+    --secondary-foreground: 36 15% 85%;
 
-    --muted: 225 12% 15%;
-    --muted-foreground: 210 10% 50%;
+    --muted: 230 12% 16%;
+    --muted-foreground: 36 8% 52%;
 
-    --accent: 243 30% 18%;
-    --accent-foreground: 243 40% 72%;
+    --accent: 250 25% 18%;
+    --accent-foreground: 250 35% 72%;
 
     --destructive: 0 50% 48%;
     --destructive-foreground: 0 0% 100%;
@@ -101,25 +104,27 @@
     --warning: 38 65% 48%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 225 10% 18%;
-    --input: 225 12% 16%;
-    --ring: 243 50% 62%;
+    --border: 230 12% 18%;
+    --input: 230 12% 16%;
+    --ring: 24 80% 58%;
 
-    --surface-1: 225 12% 12%;
-    --surface-2: 225 12% 10%;
+    --surface-1: 230 15% 12%;
+    --surface-2: 230 15% 10%;
+
     --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.2);
-    --shadow-md: 0 2px 8px -1px hsl(0 0% 0% / 0.3), 0 1px 3px hsl(0 0% 0% / 0.2);
-    --shadow-lg: 0 4px 16px -2px hsl(0 0% 0% / 0.35), 0 2px 6px hsl(0 0% 0% / 0.2);
-    --shadow-hover: 0 8px 24px -4px hsl(0 0% 0% / 0.4), 0 2px 8px hsl(0 0% 0% / 0.2);
+    --shadow-md: 0 1px 3px hsl(0 0% 0% / 0.25), 0 4px 12px -2px hsl(0 0% 0% / 0.2);
+    --shadow-lg: 0 2px 6px hsl(0 0% 0% / 0.3), 0 8px 24px -4px hsl(0 0% 0% / 0.25);
 
-    --sidebar-background: 225 12% 9%;
-    --sidebar-foreground: 210 10% 50%;
-    --sidebar-primary: 243 50% 62%;
+    --brand-gradient: radial-gradient(ellipse 80% 60% at 50% 0%, hsl(24 80% 58% / 0.05) 0%, transparent 70%);
+
+    --sidebar-background: 230 15% 8%;
+    --sidebar-foreground: 36 8% 50%;
+    --sidebar-primary: 24 80% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 243 30% 16%;
-    --sidebar-accent-foreground: 243 40% 68%;
-    --sidebar-border: 225 10% 15%;
-    --sidebar-ring: 243 50% 62%;
+    --sidebar-accent: 250 25% 16%;
+    --sidebar-accent-foreground: 250 35% 65%;
+    --sidebar-border: 230 12% 15%;
+    --sidebar-ring: 24 80% 58%;
   }
 }
 
@@ -142,7 +147,7 @@
     transition: all 150ms ease-out;
   }
 
-  /* Premium focus ring — thin indigo glow */
+  /* Focus ring — matches primary */
   :focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 3.5px hsl(var(--ring) / 0.3);
@@ -158,27 +163,16 @@
   /* ── Surface system ── */
   .surface-1 {
     background: hsl(var(--surface-1));
-    border: 1px solid hsl(var(--border) / 0.6);
+    border: 1px solid hsl(var(--border) / 0.7);
     box-shadow: var(--shadow-md);
-    border-radius: 16px;
+    border-radius: var(--radius);
     transition: box-shadow 200ms ease-out, transform 200ms ease-out;
-  }
-  .surface-1-interactive {
-    background: hsl(var(--surface-1));
-    border: 1px solid hsl(var(--border) / 0.6);
-    box-shadow: var(--shadow-md);
-    border-radius: 16px;
-    transition: box-shadow 200ms ease-out, transform 200ms ease-out;
-  }
-  .surface-1-interactive:hover {
-    box-shadow: var(--shadow-hover);
-    transform: translateY(-1px);
   }
 
   .surface-2 {
     background: hsl(var(--surface-2));
     border: 1px solid hsl(var(--border) / 0.4);
-    border-radius: 16px;
+    border-radius: var(--radius);
   }
 
   .surface-hero {
@@ -193,7 +187,7 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, hsl(var(--primary) / 0.04) 0%, transparent 50%, hsl(var(--accent) / 0.15) 100%);
+    background: var(--brand-gradient);
     pointer-events: none;
     z-index: 0;
   }
@@ -211,29 +205,29 @@
 
   .page-title {
     @apply font-semibold text-foreground tracking-tight;
-    font-size: clamp(26px, 3.5vw, 32px);
+    font-size: clamp(24px, 3vw, 30px);
   }
 
   /* ── Layout ── */
   .page-container {
     @apply mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8;
-    max-width: 1080px;
+    max-width: 1060px;
     position: relative;
     z-index: 1;
   }
 
-  /* Header wash — subtle iOS-style top gradient */
-  .header-wash {
+  /* Brand header wash — subtle radial glow behind page header */
+  .brand-wash {
     position: relative;
   }
-  .header-wash::before {
+  .brand-wash::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 160px;
-    background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background) / 0) 100%);
+    height: 200px;
+    background: var(--brand-gradient);
     pointer-events: none;
     z-index: 0;
   }
@@ -246,16 +240,16 @@
     background: hsl(var(--muted) / 0.5);
   }
 
-  /* iOS-style pill chip */
+  /* Pill chip */
   .pill-chip {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
     background: hsl(var(--muted));
     color: hsl(var(--muted-foreground));
   }
 
-  /* LifeOS gradient divider */
+  /* LifeOS divider */
   .lifeos-divider {
     height: 1px;
-    background: linear-gradient(90deg, transparent 0%, hsl(var(--border)) 20%, hsl(var(--primary) / 0.15) 50%, hsl(var(--border)) 80%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, hsl(var(--border)) 30%, hsl(var(--primary) / 0.12) 50%, hsl(var(--border)) 70%, transparent 100%);
   }
 }

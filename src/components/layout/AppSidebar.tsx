@@ -26,12 +26,12 @@ export function AppSidebar() {
   const inboxCount = data.inboxItems.filter(i => i.status === 'unprocessed').length;
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border/60 bg-[hsl(var(--surface-2))]" data-tour="sidebar">
-      <div className="flex h-14 items-center px-4 border-b border-sidebar-border gap-2">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border/50 bg-card" data-tour="sidebar">
+      <div className="flex h-14 items-center px-4 border-b border-sidebar-border/50 gap-2">
         {!collapsed && (
           <span className="flex items-center gap-2">
             <Leaf className="h-5 w-5 text-primary" />
-            <span className="text-lg font-display font-semibold tracking-tight text-foreground">
+            <span className="text-base font-semibold tracking-tight text-foreground">
               Life<span className="text-primary">OS</span>
             </span>
           </span>
