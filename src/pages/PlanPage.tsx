@@ -65,25 +65,25 @@ export default function PlanPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title">Plan</h1>
-          <p className="text-xs text-muted-foreground">Tasks & schedule in one place</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Tasks & schedule in one place</p>
         </div>
-        <Button size="sm" onClick={() => document.getElementById('plan-quick-add')?.focus()} className="gap-2">
+        <Button onClick={() => document.getElementById('plan-quick-add')?.focus()} className="gap-2">
           <Plus className="h-4 w-4" /> Add Task
         </Button>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-5">
+      <div className="grid lg:grid-cols-3 gap-6">
         {/* Left: Tasks card */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Segmented control */}
-          <div className="flex gap-0.5 rounded-xl bg-muted p-1">
+          {/* Segmented control — pill style */}
+          <div className="flex gap-0.5 rounded-full bg-muted p-1">
             {(['today', 'upcoming', 'all'] as Segment[]).map(s => (
               <button
                 key={s}
                 onClick={() => setSegment(s)}
-                className={`flex-1 px-3 py-1.5 text-sm rounded-[10px] capitalize transition-all duration-150 ${
+                className={`flex-1 px-3.5 py-1.5 text-sm rounded-full capitalize transition-all duration-150 ${
                   segment === s
-                    ? 'bg-card text-foreground font-medium shadow-sm'
+                    ? 'bg-card text-foreground font-medium shadow-[var(--shadow-sm)]'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -94,8 +94,8 @@ export default function PlanPage() {
 
           {/* Task list card */}
           <div className="surface-1 overflow-hidden">
-            {/* Card header with quick add */}
-            <div className="px-4 pt-4 pb-3 border-b border-border/40">
+            {/* Header with quick add */}
+            <div className="px-5 pt-4 pb-3 border-b border-border/40">
               <p className="section-label mb-3">{segmentLabel[segment]}</p>
               <form onSubmit={e => { e.preventDefault(); handleQuickAdd(); }} className="flex gap-2">
                 <Input
@@ -111,16 +111,16 @@ export default function PlanPage() {
 
             {/* Task rows */}
             {filteredTasks.length === 0 ? (
-              <div className="text-center py-12 text-sm text-muted-foreground">
+              <div className="text-center py-14 text-sm text-muted-foreground">
                 {segment === 'today' ? 'Nothing due today. Enjoy!' : 'No tasks found.'}
               </div>
             ) : (
               <div>
                 {filteredTasks.map((task, i) => (
-                  <div key={task.id} className={`flex items-center gap-3 px-4 py-2.5 group row-hover ${i > 0 ? 'border-t border-border/30' : ''}`}>
+                  <div key={task.id} className={`flex items-center gap-3 px-5 py-2.5 group row-hover ${i > 0 ? 'border-t border-border/30' : ''}`}>
                     <button
                       onClick={() => toggleTaskDone(task.id)}
-                      className="h-[16px] w-[16px] rounded border border-border shrink-0 flex items-center justify-center hover:border-primary transition-colors"
+                      className="h-4 w-4 rounded border border-border shrink-0 flex items-center justify-center hover:border-primary transition-colors"
                     >
                       {task.status === 'done' && <div className="h-2 w-2 rounded-sm bg-primary" />}
                     </button>
@@ -140,7 +140,7 @@ export default function PlanPage() {
 
             {/* Footer */}
             {data.tasks.filter(t => t.status !== 'done').length > 12 && (
-              <div className="px-4 py-3 border-t border-border/40">
+              <div className="px-5 py-3 border-t border-border/40">
                 <button onClick={() => navigate('/tasks')} className="text-xs text-primary hover:underline flex items-center gap-1">
                   View all tasks <ChevronRight className="h-3 w-3" />
                 </button>
@@ -152,16 +152,16 @@ export default function PlanPage() {
         {/* Right: Schedule rail */}
         <div className="hidden lg:block space-y-4">
           <div className="surface-1 overflow-hidden">
-            <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between">
+            <div className="px-4 py-3.5 border-b border-border/40 flex items-center justify-between">
               <p className="section-label">Today's Schedule</p>
               <button onClick={() => navigate('/calendar')} className="text-[11px] text-primary hover:underline">Calendar</button>
             </div>
 
             {todayAgenda.length === 0 ? (
-              <div className="py-10 text-center space-y-2.5 px-4">
+              <div className="py-12 text-center space-y-3 px-4">
                 <Calendar className="h-5 w-5 text-muted-foreground/40 mx-auto" />
                 <p className="text-sm text-muted-foreground">Nothing scheduled</p>
-                <Button size="sm" variant="ghost" onClick={() => navigate('/calendar')} className="text-xs">
+                <Button size="sm" variant="outline" onClick={() => navigate('/calendar')} className="text-xs">
                   Open calendar
                 </Button>
               </div>

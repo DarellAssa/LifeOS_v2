@@ -50,13 +50,13 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
   };
 
   return (
-    <header className="relative flex h-14 items-center gap-4 border-b border-border/60 bg-[hsl(var(--surface-2))] px-4">
+    <header className="relative flex h-14 items-center gap-4 border-b border-border/50 bg-card px-4">
       <SidebarTrigger className="shrink-0" />
       <div className="flex flex-1 items-center gap-2">
          <button
           data-tour="quick-capture"
           onClick={onOpenSearch}
-          className="flex h-9 w-full max-w-sm items-center gap-2 rounded-xl border border-border/60 bg-card px-3.5 text-sm text-muted-foreground transition-all duration-150 hover:border-ring/20 hover:shadow-sm focus:border-ring/30 focus:shadow-[0_0_0_3px_hsl(var(--ring)/0.08)]"
+          className="flex h-9 w-full max-w-sm items-center gap-2 rounded-full border border-border bg-input/40 px-4 text-sm text-muted-foreground transition-all duration-150 hover:border-ring/20 hover:shadow-[var(--shadow-sm)] focus:border-ring/30 focus:shadow-[0_0_0_3px_hsl(var(--ring)/0.08)]"
         >
           <Search className="h-4 w-4 stroke-[1.5]" />
           <span>Search…</span>

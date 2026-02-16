@@ -9,12 +9,18 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-[0_1px_2px_hsl(var(--primary)/0.3),inset_0_1px_0_hsl(0_0%_100%/0.15)] hover:shadow-[0_3px_10px_hsl(var(--primary)/0.25),inset_0_1px_0_hsl(0_0%_100%/0.15)] hover:-translate-y-[0.5px] active:translate-y-0 active:shadow-[0_1px_2px_hsl(var(--primary)/0.2)]",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:scale-[0.98]",
-        outline: "border border-border bg-card hover:bg-accent/50 hover:border-border hover:shadow-sm active:scale-[0.98]",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-[0.98]",
-        ghost: "hover:bg-accent/50 hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
+        default:
+          "bg-primary text-primary-foreground shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] hover:-translate-y-px active:translate-y-0 active:shadow-[var(--shadow-sm)]",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:scale-[0.98]",
+        outline:
+          "border border-border bg-card text-foreground hover:bg-muted/50 hover:shadow-[var(--shadow-sm)] active:scale-[0.98]",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-[0.98]",
+        ghost:
+          "hover:bg-muted/60 hover:text-foreground",
+        link:
+          "text-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-5 py-2",

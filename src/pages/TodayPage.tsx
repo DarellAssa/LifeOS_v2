@@ -67,7 +67,7 @@ export default function TodayPage() {
   }, [overdue, inboxCount, remainingCount]);
 
   return (
-    <div className="space-y-6" data-tour="dashboard-header">
+    <div className="space-y-8" data-tour="dashboard-header">
       {/* Greeting */}
       <div className="space-y-1">
         <h1 className="page-title">
@@ -109,18 +109,18 @@ export default function TodayPage() {
       )}
 
       {!hasNoData && (
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-3">
           {/* MAIN COLUMN */}
-          <div className="lg:col-span-2 space-y-5">
+          <div className="lg:col-span-2 space-y-6">
             {/* Hero Focus Card */}
-            <div className="surface-hero p-5 sm:p-6 space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <Sparkles className="h-4 w-4 text-primary" />
+            <div className="surface-hero p-6 sm:p-7 space-y-5">
+              <div className="flex items-start gap-3.5">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Sparkles className="h-5 w-5 text-primary" />
                 </div>
                 <div className="space-y-1 flex-1 min-w-0">
-                  <p className="section-label">Today's Focus</p>
-                  <p className="text-sm text-foreground">
+                  <h2 className="text-base font-semibold text-foreground">Today's Focus</h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
                     {overdue.length > 0
                       ? `You have ${overdue.length} overdue item${overdue.length > 1 ? 's' : ''} to clear.`
                       : remainingCount > 0
@@ -150,14 +150,13 @@ export default function TodayPage() {
               <div className="flex flex-wrap gap-2.5">
                 {heroAction && (
                   <Button
-                    size="sm"
                     onClick={() => navigate(heroAction.route)}
                     className={`gap-2 ${heroAction.isOverdue ? 'bg-[hsl(var(--attention))] hover:bg-[hsl(var(--attention)/0.9)] text-white' : ''}`}
                   >
-                    {heroAction.label} <ArrowRight className="h-3.5 w-3.5" />
+                    {heroAction.label} <ArrowRight className="h-4 w-4" />
                   </Button>
                 )}
-                <Button size="sm" variant="outline" onClick={() => navigate('/plan')} className="gap-2">
+                <Button variant="outline" onClick={() => navigate('/plan')} className="gap-2">
                   Open Plan
                 </Button>
               </div>
@@ -165,7 +164,7 @@ export default function TodayPage() {
 
             {/* Next Up */}
             {nextActions.length > 0 && (
-              <section className="space-y-2.5">
+              <section className="space-y-3">
                 <h2 className="section-label px-1">Next up</h2>
                 <div className="surface-1 overflow-hidden">
                   {nextActions.map((item, i) => (
@@ -185,17 +184,17 @@ export default function TodayPage() {
           </div>
 
           {/* RIGHT RAIL */}
-          <div className="space-y-5">
+          <div className="space-y-6">
             {/* Schedule */}
             {todayAgenda.length > 0 && (
-              <section className="space-y-2.5">
+              <section className="space-y-3">
                 <div className="flex items-center justify-between px-1">
                   <h2 className="section-label">Schedule</h2>
                   <button onClick={() => navigate('/calendar')} className="text-[11px] text-primary hover:underline">Calendar</button>
                 </div>
                 <div className="surface-1 overflow-hidden">
                   {todayAgenda.slice(0, 4).map((item, i) => (
-                    <div key={item.id} className={`flex items-center gap-2.5 px-3.5 py-2.5 row-hover ${i > 0 ? 'border-t border-border/40' : ''}`}>
+                    <div key={item.id} className={`flex items-center gap-2.5 px-4 py-2.5 row-hover ${i > 0 ? 'border-t border-border/30' : ''}`}>
                       <div className="h-1.5 w-1.5 rounded-full bg-primary/50 shrink-0" />
                       <span className="text-sm flex-1 truncate">{item.title}</span>
                       <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
@@ -208,12 +207,12 @@ export default function TodayPage() {
             )}
 
             {/* Capture */}
-            <section className="space-y-2.5">
+            <section className="space-y-3">
               <h2 className="section-label px-1">Capture</h2>
-              <div className="surface-1 overflow-hidden p-3 space-y-2">
+              <div className="surface-1 overflow-hidden p-3.5 space-y-2">
                 <button
                   onClick={() => navigate('/capture')}
-                  className="flex items-center gap-2 w-full rounded-xl bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  className="flex items-center gap-2 w-full rounded-xl bg-input/50 px-3.5 py-2.5 text-sm text-muted-foreground hover:bg-input hover:text-foreground transition-colors"
                 >
                   <Inbox className="h-4 w-4 shrink-0" />
                   <span>Capture something…</span>
@@ -231,10 +230,10 @@ export default function TodayPage() {
 
             {/* Daily Briefing */}
             {showBriefingToggle && (
-              <section className="space-y-2.5">
+              <section className="space-y-3">
                 <button
                   onClick={() => setBriefingOpen(!briefingOpen)}
-                  className="flex items-center gap-2 w-full text-left surface-1 px-4 py-3 row-hover"
+                  className="flex items-center gap-2.5 w-full text-left surface-1 px-4 py-3 row-hover"
                 >
                   <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
                   <span className="text-sm font-medium flex-1">Daily Briefing</span>
