@@ -50,7 +50,7 @@ export function AppHeader({ onOpenSearch, onOpenCommandPalette, onOpenCopilot }:
   };
 
   return (
-    <header className="relative flex h-14 items-center gap-4 border-b border-border/50 bg-card px-4">
+    <header className="relative flex h-14 items-center gap-4 border-b border-border/40 bg-card px-4">
       <SidebarTrigger className="shrink-0" />
       <div className="flex flex-1 items-center gap-2">
          <button
