@@ -26,7 +26,7 @@ export function AppSidebar() {
   const inboxCount = data.inboxItems.filter(i => i.status === 'unprocessed').length;
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar" data-tour="sidebar">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border/60 bg-[hsl(var(--surface-2))]" data-tour="sidebar">
       <div className="flex h-14 items-center px-4 border-b border-sidebar-border gap-2">
         {!collapsed && (
           <span className="flex items-center gap-2">
