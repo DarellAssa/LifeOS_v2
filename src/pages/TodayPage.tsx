@@ -2,6 +2,7 @@ import { useMemo, useCallback, useState } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/PageHeader';
 import { CheckSquare, Inbox, ArrowRight, ChevronDown, ChevronUp, Sparkles, Leaf, Calendar, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -68,14 +69,14 @@ export default function TodayPage() {
 
   return (
     <div className="space-y-8" data-tour="dashboard-header">
-      {/* Greeting */}
+      {/* Greeting — Hero Header */}
       <div className="space-y-1">
         <h1 className="page-title">
           Good {greeting}{userName ? `, ${userName}` : ''}
         </h1>
         <p className="text-sm text-muted-foreground">{format(new Date(), 'EEEE, MMMM d')}</p>
         {statusLine && !hasNoData && (
-          <p className="text-xs text-muted-foreground mt-0.5">{statusLine}</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">{statusLine}</p>
         )}
       </div>
 
@@ -83,7 +84,7 @@ export default function TodayPage() {
       {hasNoData && (
         <div className="surface-hero p-10 text-center space-y-5">
           <div className="flex justify-center">
-            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <div className="icon-chip">
               <Leaf className="h-6 w-6 text-primary" />
             </div>
           </div>
@@ -115,7 +116,7 @@ export default function TodayPage() {
             {/* Hero Focus Card */}
             <div className="surface-hero p-6 sm:p-7 space-y-5">
               <div className="flex items-start gap-3.5">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <div className="icon-chip">
                   <Sparkles className="h-5 w-5 text-primary" />
                 </div>
                 <div className="space-y-1 flex-1 min-w-0">
@@ -171,7 +172,7 @@ export default function TodayPage() {
                     <button
                       key={item.id}
                       onClick={() => navigate(item.route)}
-                      className={`flex items-center gap-3 w-full px-4 py-3 text-left row-hover group ${i > 0 ? 'border-t border-border/40' : ''}`}
+                      className={`flex items-center gap-3 w-full px-4 py-3 text-left row-hover group ${i > 0 ? 'border-t border-border/30' : ''}`}
                     >
                       <div className={`h-2 w-2 rounded-full shrink-0 ${item.urgent ? 'bg-[hsl(var(--attention))]' : 'bg-primary/40'}`} />
                       <span className="text-sm flex-1 truncate">{item.title}</span>
@@ -194,7 +195,7 @@ export default function TodayPage() {
                 </div>
                 <div className="surface-1 overflow-hidden">
                   {todayAgenda.slice(0, 4).map((item, i) => (
-                    <div key={item.id} className={`flex items-center gap-2.5 px-4 py-2.5 row-hover ${i > 0 ? 'border-t border-border/30' : ''}`}>
+                    <div key={item.id} className={`flex items-center gap-2.5 px-4 py-2.5 row-hover ${i > 0 ? 'border-t border-border/25' : ''}`}>
                       <div className="h-1.5 w-1.5 rounded-full bg-primary/50 shrink-0" />
                       <span className="text-sm flex-1 truncate">{item.title}</span>
                       <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">

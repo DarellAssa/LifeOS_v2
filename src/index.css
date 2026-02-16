@@ -276,6 +276,16 @@
     color: hsl(var(--muted-foreground));
   }
 
+  /* Icon chip — rounded square with tinted bg */
+  .icon-chip {
+    @apply h-10 w-10 rounded-xl flex items-center justify-center shrink-0;
+    background: hsl(var(--primary) / 0.1);
+  }
+  .icon-chip-sm {
+    @apply h-7 w-7 rounded-lg flex items-center justify-center shrink-0;
+    background: hsl(var(--primary) / 0.08);
+  }
+
   /* LifeOS signature divider — subtle gradient line */
   .lifeos-divider {
     height: 1px;
