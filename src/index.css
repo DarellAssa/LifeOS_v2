@@ -6,146 +6,148 @@
 
 @layer base {
   :root {
-    /* ═══ LifeOS "Dawn" — Warm daylight on paper ═══ */
+    /* ═══ LifeOS "Dawn" — Morning sunlight on paper ═══ */
 
-    /* Backgrounds — warm paper #FBF7F1 */
-    --background: 36 50% 96.5%;
-    --foreground: 213 13% 14%;             /* #1F2328 warm charcoal */
+    /* Background layers */
+    --background: 36 45% 96%;               /* warm paper — #FAF6F0 */
+    --foreground: 220 14% 14%;              /* warm charcoal — not pure black */
 
-    /* Surfaces — true warm white */
-    --card: 0 0% 100%;                     /* pure white surface */
-    --card-foreground: 213 13% 14%;
+    /* Card surfaces — lifted warm white */
+    --card: 40 33% 99%;                     /* #FEFDFB — slight warmth */
+    --card-foreground: 220 14% 14%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 213 13% 14%;
+    --popover: 40 33% 99%;
+    --popover-foreground: 220 14% 14%;
 
-    /* Primary — tangerine #E9892F */
-    --primary: 29 83% 55%;
+    /* Primary — warm apricot/amber (toned down, not loud) */
+    --primary: 28 76% 56%;                  /* #D98C3B — warm apricot */
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary — soft warm neutral */
-    --secondary: 34 18% 94%;
-    --secondary-foreground: 213 13% 14%;
+    /* Secondary — cool slate for contrast/balance */
+    --secondary: 200 12% 92%;              /* cool neutral surface */
+    --secondary-foreground: 200 10% 30%;
 
-    /* Muted — warm sand #F3EEE6 */
-    --muted: 37 35% 93%;
-    --muted-foreground: 218 5% 44%;        /* #6B6F76 */
+    /* Muted — warm sand */
+    --muted: 35 30% 93%;                   /* #F2EDE5 */
+    --muted-foreground: 220 8% 46%;        /* warm gray */
 
-    /* Accent — warm primary tint for selection/hover */
-    --accent: 29 40% 95%;
-    --accent-foreground: 29 70% 38%;
+    /* Accent — warm tint for hover/selection */
+    --accent: 30 35% 94%;
+    --accent-foreground: 28 60% 35%;
 
-    /* Destructive — muted brick #C84C3A */
-    --destructive: 8 56% 51%;
+    /* Destructive — muted brick */
+    --destructive: 6 52% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Status colors */
-    --attention: 30 80% 52%;
-    --attention-foreground: 30 90% 18%;
-    --attention-muted: 30 60% 95%;
+    /* Status */
+    --attention: 30 75% 50%;
+    --attention-foreground: 30 85% 18%;
+    --attention-muted: 30 55% 94%;
 
-    --success: 152 40% 44%;
-    --success-foreground: 152 40% 20%;
+    --success: 155 38% 42%;
+    --success-foreground: 155 35% 18%;
 
-    --warning: 38 55% 50%;
-    --warning-foreground: 38 70% 20%;
+    --warning: 40 55% 48%;
+    --warning-foreground: 40 65% 18%;
 
-    /* AI / Copilot indigo accent — used sparingly */
-    --ai: 235 73% 63%;                     /* #5B67E6 */
+    /* AI / Copilot — cool indigo, used sparingly */
+    --ai: 235 65% 60%;
     --ai-foreground: 0 0% 100%;
-    --ai-muted: 235 50% 95%;
+    --ai-muted: 235 40% 95%;
 
-    /* Borders & inputs — warm #E8DFD3 */
-    --border: 34 30% 87%;
-    --input: 37 35% 93%;
-    --ring: 29 83% 55%;                    /* matches primary */
+    /* Borders & inputs */
+    --border: 32 22% 86%;                  /* warm subtle — #E5DDD1 */
+    --input: 35 22% 91%;
+    --ring: 28 76% 56%;                    /* matches primary */
 
     --radius: 14px;
 
-    /* Surface layers */
-    --surface-1: 0 0% 100%;               /* card white */
-    --surface-2: 36 30% 97%;              /* panel tint */
+    /* Surface system */
+    --surface-1: 40 33% 99%;
+    --surface-2: 36 28% 96%;
 
-    /* Shadows — warm tone */
-    --shadow-sm: 0 1px 2px hsl(30 15% 40% / 0.05);
-    --shadow-md: 0 1px 3px hsl(30 15% 40% / 0.06), 0 4px 12px -2px hsl(30 15% 40% / 0.06);
-    --shadow-lg: 0 2px 6px hsl(30 15% 40% / 0.08), 0 10px 28px -4px hsl(30 15% 40% / 0.08);
+    /* Elevation — soft, wide, warm shadows */
+    --shadow-xs: 0 1px 2px 0 hsl(30 20% 30% / 0.04);
+    --shadow-sm: 0 1px 3px hsl(30 15% 35% / 0.05), 0 1px 2px -1px hsl(30 15% 35% / 0.04);
+    --shadow-md: 0 2px 6px -1px hsl(30 15% 35% / 0.06), 0 6px 16px -3px hsl(30 15% 35% / 0.06);
+    --shadow-lg: 0 4px 12px -2px hsl(30 15% 35% / 0.07), 0 12px 32px -6px hsl(30 15% 35% / 0.07);
 
-    /* Brand "aurora glow" — subtle radial behind headers */
-    --brand-gradient: radial-gradient(ellipse 90% 50% at 50% -5%, hsl(29 83% 55% / 0.06) 0%, transparent 65%);
+    /* Brand aurora glow */
+    --brand-gradient: radial-gradient(ellipse 80% 60% at 50% -10%, hsl(28 76% 56% / 0.05) 0%, transparent 60%);
 
     /* Sidebar */
-    --sidebar-background: 36 30% 97%;
-    --sidebar-foreground: 218 5% 44%;
-    --sidebar-primary: 29 83% 55%;
+    --sidebar-background: 36 28% 96%;
+    --sidebar-foreground: 220 8% 46%;
+    --sidebar-primary: 28 76% 56%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 29 40% 95%;
-    --sidebar-accent-foreground: 29 70% 38%;
-    --sidebar-border: 34 30% 90%;
-    --sidebar-ring: 29 83% 55%;
+    --sidebar-accent: 30 35% 94%;
+    --sidebar-accent-foreground: 28 60% 35%;
+    --sidebar-border: 32 22% 89%;
+    --sidebar-ring: 28 76% 56%;
   }
 
   .dark {
-    /* ═══ LifeOS "Night" — Refined warm dark ═══ */
-    --background: 25 15% 9%;
-    --foreground: 34 15% 85%;
+    /* ═══ LifeOS "Night" — Warm refined dark ═══ */
+    --background: 24 14% 9%;
+    --foreground: 36 12% 84%;
 
-    --card: 25 12% 12%;
-    --card-foreground: 34 15% 85%;
+    --card: 24 12% 12%;
+    --card-foreground: 36 12% 84%;
 
-    --popover: 25 12% 12%;
-    --popover-foreground: 34 15% 85%;
+    --popover: 24 12% 12%;
+    --popover-foreground: 36 12% 84%;
 
-    --primary: 29 78% 56%;
+    --primary: 28 72% 55%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 25 12% 15%;
-    --secondary-foreground: 34 15% 85%;
+    --secondary: 210 8% 16%;
+    --secondary-foreground: 210 6% 70%;
 
-    --muted: 25 10% 16%;
-    --muted-foreground: 34 8% 52%;
+    --muted: 24 10% 16%;
+    --muted-foreground: 36 6% 50%;
 
-    --accent: 29 30% 18%;
-    --accent-foreground: 29 50% 72%;
+    --accent: 28 25% 17%;
+    --accent-foreground: 28 45% 68%;
 
-    --destructive: 8 50% 48%;
+    --destructive: 6 48% 46%;
     --destructive-foreground: 0 0% 100%;
 
-    --attention: 30 70% 55%;
-    --attention-foreground: 30 80% 90%;
-    --attention-muted: 30 50% 18%;
+    --attention: 30 65% 52%;
+    --attention-foreground: 30 75% 88%;
+    --attention-muted: 30 45% 16%;
 
-    --success: 152 40% 42%;
-    --success-foreground: 152 30% 80%;
+    --success: 155 35% 40%;
+    --success-foreground: 155 28% 78%;
 
-    --warning: 38 65% 48%;
-    --warning-foreground: 38 50% 88%;
+    --warning: 40 55% 46%;
+    --warning-foreground: 40 45% 85%;
 
-    --ai: 235 65% 65%;
+    --ai: 235 60% 62%;
     --ai-foreground: 0 0% 100%;
-    --ai-muted: 235 30% 18%;
+    --ai-muted: 235 25% 16%;
 
-    --border: 25 10% 18%;
-    --input: 25 10% 16%;
-    --ring: 29 78% 56%;
+    --border: 24 10% 18%;
+    --input: 24 10% 16%;
+    --ring: 28 72% 55%;
 
-    --surface-1: 25 12% 12%;
-    --surface-2: 25 12% 10%;
+    --surface-1: 24 12% 12%;
+    --surface-2: 24 12% 10%;
 
-    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.2);
-    --shadow-md: 0 1px 3px hsl(0 0% 0% / 0.25), 0 4px 12px -2px hsl(0 0% 0% / 0.2);
-    --shadow-lg: 0 2px 6px hsl(0 0% 0% / 0.3), 0 8px 24px -4px hsl(0 0% 0% / 0.25);
+    --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.15);
+    --shadow-sm: 0 1px 3px hsl(0 0% 0% / 0.2), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
+    --shadow-md: 0 2px 6px -1px hsl(0 0% 0% / 0.25), 0 6px 16px -3px hsl(0 0% 0% / 0.2);
+    --shadow-lg: 0 4px 12px -2px hsl(0 0% 0% / 0.3), 0 12px 32px -6px hsl(0 0% 0% / 0.25);
 
-    --brand-gradient: radial-gradient(ellipse 90% 50% at 50% -5%, hsl(29 78% 56% / 0.04) 0%, transparent 65%);
+    --brand-gradient: radial-gradient(ellipse 80% 60% at 50% -10%, hsl(28 72% 55% / 0.03) 0%, transparent 60%);
 
-    --sidebar-background: 25 12% 8%;
-    --sidebar-foreground: 34 8% 50%;
-    --sidebar-primary: 29 78% 56%;
+    --sidebar-background: 24 12% 8%;
+    --sidebar-foreground: 36 6% 48%;
+    --sidebar-primary: 28 72% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 29 30% 16%;
-    --sidebar-accent-foreground: 29 50% 65%;
-    --sidebar-border: 25 10% 15%;
-    --sidebar-ring: 29 78% 56%;
+    --sidebar-accent: 28 25% 15%;
+    --sidebar-accent-foreground: 28 40% 62%;
+    --sidebar-border: 24 10% 14%;
+    --sidebar-ring: 28 72% 55%;
   }
 }
 
@@ -163,15 +165,15 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Global transitions — smooth but not heavy */
-  button, a, [role="button"] {
-    transition: all 150ms ease-out;
+  /* Smooth micro-interactions for all interactive elements */
+  button, a, [role="button"], input, textarea {
+    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Focus ring — soft primary glow */
+  /* Refined focus ring — soft primary glow */
   :focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 3.5px hsl(var(--ring) / 0.25);
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 3.5px hsl(var(--ring) / 0.22);
   }
 }
 
@@ -184,24 +186,25 @@
   /* ── Surface system ── */
   .surface-1 {
     background: hsl(var(--surface-1));
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: 1px solid hsl(var(--border) / 0.45);
     box-shadow: var(--shadow-md);
     border-radius: var(--radius);
-    transition: box-shadow 200ms ease-out, transform 200ms ease-out;
+    transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   .surface-1:hover {
     box-shadow: var(--shadow-lg);
+    transform: translateY(-1px);
   }
 
   .surface-2 {
     background: hsl(var(--surface-2));
-    border: 1px solid hsl(var(--border) / 0.3);
+    border: 1px solid hsl(var(--border) / 0.25);
     border-radius: var(--radius);
   }
 
   .surface-hero {
     background: hsl(var(--surface-1));
-    border: 1px solid hsl(var(--border) / 0.35);
+    border: 1px solid hsl(var(--border) / 0.3);
     box-shadow: var(--shadow-lg);
     border-radius: 18px;
     position: relative;
@@ -220,17 +223,18 @@
     z-index: 1;
   }
 
-  /* ── Typography ── */
+  /* ── Typography system ── */
   .section-label {
     @apply font-semibold uppercase text-muted-foreground;
     font-size: 11px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
   }
 
   .page-title {
     @apply font-bold text-foreground;
     font-size: clamp(24px, 3vw, 30px);
-    letter-spacing: -0.025em;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
   }
 
   /* ── Layout ── */
@@ -241,7 +245,7 @@
     z-index: 1;
   }
 
-  /* Aurora glow header wash — subtle radial behind page header */
+  /* Aurora glow header wash */
   .brand-wash {
     position: relative;
   }
@@ -251,7 +255,7 @@
     top: 0;
     left: 0;
     right: 0;
-    height: 220px;
+    height: 240px;
     background: var(--brand-gradient);
     pointer-events: none;
     z-index: 0;
@@ -262,7 +266,7 @@
     @apply transition-colors duration-100;
   }
   .row-hover:hover {
-    background: hsl(var(--muted) / 0.5);
+    background: hsl(var(--accent) / 0.6);
   }
 
   /* Pill chip — soft tinted background */
@@ -272,10 +276,10 @@
     color: hsl(var(--muted-foreground));
   }
 
-  /* LifeOS signature divider */
+  /* LifeOS signature divider — subtle gradient line */
   .lifeos-divider {
     height: 1px;
-    background: linear-gradient(90deg, transparent 0%, hsl(var(--border)) 30%, hsl(var(--primary) / 0.12) 50%, hsl(var(--border)) 70%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, hsl(var(--border)) 25%, hsl(var(--primary) / 0.15) 50%, hsl(var(--border)) 75%, transparent 100%);
   }
 
   /* ── Semantic status utilities ── */
