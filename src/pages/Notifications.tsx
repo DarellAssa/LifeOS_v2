@@ -13,8 +13,8 @@ import { NotificationItem, NotificationSeverity } from '@/types';
 
 const severityConfig: Record<NotificationSeverity, { icon: typeof AlertCircle; className: string }> = {
   critical: { icon: AlertCircle, className: 'text-destructive' },
-  warning: { icon: AlertTriangle, className: 'text-yellow-600 dark:text-yellow-400' },
-  info: { icon: Info, className: 'text-blue-500' },
+  warning: { icon: AlertTriangle, className: 'text-[hsl(var(--attention))]' },
+  info: { icon: Info, className: 'text-primary/60' },
 };
 
 export default function Notifications() {

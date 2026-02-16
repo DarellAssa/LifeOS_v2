@@ -265,8 +265,8 @@ export default function Analytics() {
           <CardHeader className="pb-2"><CardTitle className="text-base">Goal Status</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3">
-                <p className="text-xl font-bold text-green-700 dark:text-green-400">{goalStatusCounts.onTrack}</p>
+              <div className="rounded-lg border border-success/20 bg-success/5 p-3">
+                <p className="text-xl font-bold text-success">{goalStatusCounts.onTrack}</p>
                 <p className="text-[10px] text-muted-foreground">On track</p>
               </div>
               <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
@@ -317,7 +317,7 @@ export default function Analytics() {
                   return (
                     <div key={h.id} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Flame className="h-3 w-3 text-orange-500" />
+                        <Flame className="h-3 w-3 text-primary" />
                         <span className="text-sm">{h.title}</span>
                       </div>
                       <div className="flex items-center gap-2">

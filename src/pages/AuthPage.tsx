@@ -29,7 +29,7 @@ export default function AuthPage() {
 
   const passwordStrength = password.length === 0 ? 0 : password.length < 6 ? 1 : password.length < 10 ? 2 : 3;
   const strengthLabels = ['', 'Weak', 'Good', 'Strong'];
-  const strengthColors = ['', 'bg-destructive', 'bg-warning', 'bg-green-500'];
+  const strengthColors = ['', 'bg-destructive', 'bg-warning', 'bg-success'];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

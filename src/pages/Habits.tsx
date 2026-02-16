@@ -22,11 +22,11 @@ const TEMPLATES = [
 ];
 
 const categoryColors: Record<HabitCategory, string> = {
-  health: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
-  study: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
-  career: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
-  finance: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20',
-  personal: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
+  health: 'bg-success/10 text-success border-success/20',
+  study: 'bg-[hsl(var(--attention-muted))] text-[hsl(var(--attention-foreground))] border-[hsl(var(--attention)/0.2)]',
+  career: 'bg-ai-muted text-ai border-ai/20',
+  finance: 'bg-success/10 text-success border-success/20',
+  personal: 'bg-primary/10 text-primary border-primary/20',
   custom: 'bg-muted text-muted-foreground border-border',
 };
 
@@ -145,7 +145,7 @@ export default function Habits() {
                       </div>
                       <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground" title={`Best: ${bestStreak}d`}>
-                          <Flame className="h-3.5 w-3.5 text-orange-500" />{streak}d
+                          <Flame className="h-3.5 w-3.5 text-primary" />{streak}d
                         </div>
                         <Badge variant="secondary" className="text-[10px]">{adherence}%</Badge>
                         <Button size="sm" variant={loggedToday ? 'secondary' : 'default'} disabled={loggedToday}
@@ -212,7 +212,7 @@ export default function Habits() {
                   {(h as any).description && <p className="text-sm text-muted-foreground">{(h as any).description}</p>}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg border border-border p-3 text-center">
-                      <div className="flex items-center justify-center gap-1"><Flame className="h-4 w-4 text-orange-500" /><span className="text-lg font-bold">{streak}</span></div>
+                      <div className="flex items-center justify-center gap-1"><Flame className="h-4 w-4 text-primary" /><span className="text-lg font-bold">{streak}</span></div>
                       <p className="text-[10px] text-muted-foreground">Current streak</p>
                     </div>
                     <div className="rounded-lg border border-border p-3 text-center">

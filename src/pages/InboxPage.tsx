@@ -178,7 +178,7 @@ export default function InboxPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Inbox</h1>
           {unprocessedCount > 0 && <p className="text-sm text-muted-foreground">{unprocessedCount} items to process</p>}
-          {unprocessedCount === 0 && <p className="text-sm text-green-600 dark:text-green-400">Inbox Zero ✨</p>}
+          {unprocessedCount === 0 && <p className="text-sm text-success">Inbox Zero ✨</p>}
         </div>
         <Button onClick={() => setCaptureOpen(true)} size="sm"><Plus className="h-4 w-4 mr-1" /> Capture</Button>
       </div>
@@ -228,7 +228,7 @@ export default function InboxPage() {
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-[10px] text-muted-foreground">{format(new Date(item.createdAt), 'MMM d, h:mm a')}</span>
-                      {item.detected.urls.length > 0 && <Link2 className="h-2.5 w-2.5 text-blue-500" />}
+                      {item.detected.urls.length > 0 && <Link2 className="h-2.5 w-2.5 text-ai" />}
                       <Badge variant={item.status === 'unprocessed' ? 'default' : 'secondary'} className="text-[8px] ml-auto h-4">
                         {item.status === 'converted' && item.conversion ? TYPE_LABELS[item.conversion.kind] : item.status}
                       </Badge>
@@ -529,9 +529,9 @@ function InboxDebugPanel({ data, addInboxItem }: { data: any; addInboxItem: (con
   }
 
   return (
-    <div className="border border-dashed border-yellow-500/50 rounded-lg p-3 bg-yellow-500/5 text-xs space-y-2">
+    <div className="border border-dashed border-[hsl(var(--attention)/0.5)] rounded-lg p-3 bg-[hsl(var(--attention-muted))] text-xs space-y-2">
       <div className="flex items-center justify-between">
-        <span className="font-mono font-bold text-yellow-600">🐛 Inbox Debug</span>
+        <span className="font-mono font-bold text-[hsl(var(--attention-foreground))]">🐛 Inbox Debug</span>
         <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">✕</button>
       </div>
       <div className="flex gap-3 font-mono">

@@ -20,8 +20,8 @@ const SOURCE_ICONS: Record<string, any> = {
 
 const SOURCE_COLORS: Record<string, string> = {
   user: 'bg-primary/10 text-primary',
-  copilot: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
-  automation: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  copilot: 'bg-ai-muted text-ai',
+  automation: 'bg-[hsl(var(--attention-muted))] text-[hsl(var(--attention-foreground))]',
   system: 'bg-muted text-muted-foreground',
 };
 
