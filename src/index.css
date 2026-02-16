@@ -6,34 +6,43 @@
 
 @layer base {
   :root {
-    /* LifeOS Brand — Warm paper + sunrise accent */
-    --background: 36 25% 97%;            /* warm paper (#F9F7F4 vibe) */
-    --foreground: 230 25% 14%;            /* warm near-black */
+    /* ═══ LifeOS "Dawn" — Warm daylight on paper ═══ */
 
-    --card: 36 20% 99.5%;                 /* warm white cards */
-    --card-foreground: 230 25% 14%;
+    /* Backgrounds — warm off-white paper */
+    --background: 34 30% 97%;              /* #FBF7F2 vibe */
+    --foreground: 25 20% 16%;              /* deep warm charcoal */
 
-    --popover: 36 20% 99.5%;
-    --popover-foreground: 230 25% 14%;
+    /* Surfaces — true white with warmth */
+    --card: 36 25% 99.5%;                  /* warm white surface */
+    --card-foreground: 25 20% 16%;
 
-    --primary: 24 85% 56%;                /* warm sunrise CTA */
+    --popover: 36 25% 99.5%;
+    --popover-foreground: 25 20% 16%;
+
+    /* Primary — warm sunrise orange (ONE accent, no purple) */
+    --primary: 24 82% 54%;                 /* ~#E97A2B */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 36 15% 94%;              /* soft warm neutral */
-    --secondary-foreground: 230 25% 14%;
+    /* Secondary — soft warm neutral */
+    --secondary: 34 18% 94%;
+    --secondary-foreground: 25 20% 16%;
 
-    --muted: 36 12% 93%;                  /* warm muted */
-    --muted-foreground: 230 10% 46%;      /* warm readable gray */
+    /* Muted — warm sand */
+    --muted: 34 16% 92%;                   /* #F3EEE6 vibe */
+    --muted-foreground: 25 8% 48%;         /* warm readable gray */
 
-    --accent: 250 35% 95%;                /* lavender mist */
-    --accent-foreground: 250 40% 35%;
+    /* Accent — SAME family as primary (warm tint, not lavender) */
+    --accent: 24 40% 95%;                  /* warm orange tint */
+    --accent-foreground: 24 70% 38%;       /* readable warm brown */
 
-    --destructive: 0 60% 50%;
+    /* Destructive — calm red */
+    --destructive: 0 55% 50%;
     --destructive-foreground: 0 0% 100%;
 
+    /* Status colors */
     --attention: 30 80% 52%;
     --attention-foreground: 30 90% 18%;
-    --attention-muted: 30 70% 95%;
+    --attention-muted: 30 60% 95%;
 
     --success: 152 40% 44%;
     --success-foreground: 0 0% 100%;
@@ -41,55 +50,58 @@
     --warning: 38 55% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 36 12% 89%;                 /* warm subtle border */
-    --input: 36 15% 92%;                  /* warm input bg */
-    --ring: 24 85% 56%;                   /* matches primary */
+    /* Borders & inputs */
+    --border: 34 14% 89%;                  /* warm subtle border */
+    --input: 34 16% 92%;                   /* warm input bg */
+    --ring: 24 82% 54%;                    /* matches primary */
 
     --radius: 14px;
 
     /* Surface layers */
-    --surface-1: 36 20% 99.5%;            /* card white */
-    --surface-2: 36 18% 96%;              /* panel tint */
+    --surface-1: 36 25% 99.5%;             /* card white */
+    --surface-2: 34 20% 96%;               /* panel tint */
 
     /* Shadows — warm tone */
     --shadow-sm: 0 1px 2px hsl(30 15% 40% / 0.05);
     --shadow-md: 0 1px 3px hsl(30 15% 40% / 0.06), 0 4px 12px -2px hsl(30 15% 40% / 0.06);
     --shadow-lg: 0 2px 6px hsl(30 15% 40% / 0.07), 0 8px 24px -4px hsl(30 15% 40% / 0.08);
 
-    /* Brand gradient — use behind Today/Plan headers */
-    --brand-gradient: radial-gradient(ellipse 80% 60% at 50% 0%, hsl(24 85% 56% / 0.06) 0%, transparent 70%);
+    /* Brand gradient — subtle "paper glow" behind headers */
+    --brand-gradient: radial-gradient(ellipse 90% 50% at 50% -5%, hsl(24 82% 54% / 0.06) 0%, transparent 65%);
 
-    --sidebar-background: 36 18% 96%;
-    --sidebar-foreground: 230 10% 46%;
-    --sidebar-primary: 24 85% 56%;
+    /* Sidebar */
+    --sidebar-background: 34 20% 96%;
+    --sidebar-foreground: 25 8% 48%;
+    --sidebar-primary: 24 82% 54%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 250 35% 95%;
-    --sidebar-accent-foreground: 250 40% 35%;
-    --sidebar-border: 36 12% 90%;
-    --sidebar-ring: 24 85% 56%;
+    --sidebar-accent: 24 40% 95%;
+    --sidebar-accent-foreground: 24 70% 38%;
+    --sidebar-border: 34 14% 90%;
+    --sidebar-ring: 24 82% 54%;
   }
 
   .dark {
-    --background: 230 18% 9%;
-    --foreground: 36 15% 85%;
+    /* ═══ LifeOS "Night" — Refined warm dark ═══ */
+    --background: 25 15% 9%;
+    --foreground: 34 15% 85%;
 
-    --card: 230 15% 12%;
-    --card-foreground: 36 15% 85%;
+    --card: 25 12% 12%;
+    --card-foreground: 34 15% 85%;
 
-    --popover: 230 15% 12%;
-    --popover-foreground: 36 15% 85%;
+    --popover: 25 12% 12%;
+    --popover-foreground: 34 15% 85%;
 
-    --primary: 24 80% 58%;
+    --primary: 24 78% 56%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 230 15% 15%;
-    --secondary-foreground: 36 15% 85%;
+    --secondary: 25 12% 15%;
+    --secondary-foreground: 34 15% 85%;
 
-    --muted: 230 12% 16%;
-    --muted-foreground: 36 8% 52%;
+    --muted: 25 10% 16%;
+    --muted-foreground: 34 8% 52%;
 
-    --accent: 250 25% 18%;
-    --accent-foreground: 250 35% 72%;
+    --accent: 24 30% 18%;
+    --accent-foreground: 24 50% 72%;
 
     --destructive: 0 50% 48%;
     --destructive-foreground: 0 0% 100%;
@@ -104,27 +116,27 @@
     --warning: 38 65% 48%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 230 12% 18%;
-    --input: 230 12% 16%;
-    --ring: 24 80% 58%;
+    --border: 25 10% 18%;
+    --input: 25 10% 16%;
+    --ring: 24 78% 56%;
 
-    --surface-1: 230 15% 12%;
-    --surface-2: 230 15% 10%;
+    --surface-1: 25 12% 12%;
+    --surface-2: 25 12% 10%;
 
     --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.2);
     --shadow-md: 0 1px 3px hsl(0 0% 0% / 0.25), 0 4px 12px -2px hsl(0 0% 0% / 0.2);
     --shadow-lg: 0 2px 6px hsl(0 0% 0% / 0.3), 0 8px 24px -4px hsl(0 0% 0% / 0.25);
 
-    --brand-gradient: radial-gradient(ellipse 80% 60% at 50% 0%, hsl(24 80% 58% / 0.05) 0%, transparent 70%);
+    --brand-gradient: radial-gradient(ellipse 90% 50% at 50% -5%, hsl(24 78% 56% / 0.04) 0%, transparent 65%);
 
-    --sidebar-background: 230 15% 8%;
-    --sidebar-foreground: 36 8% 50%;
-    --sidebar-primary: 24 80% 58%;
+    --sidebar-background: 25 12% 8%;
+    --sidebar-foreground: 34 8% 50%;
+    --sidebar-primary: 24 78% 56%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 250 25% 16%;
-    --sidebar-accent-foreground: 250 35% 65%;
-    --sidebar-border: 230 12% 15%;
-    --sidebar-ring: 24 80% 58%;
+    --sidebar-accent: 24 30% 16%;
+    --sidebar-accent-foreground: 24 50% 65%;
+    --sidebar-border: 25 10% 15%;
+    --sidebar-ring: 24 78% 56%;
   }
 }
 
@@ -163,7 +175,7 @@
   /* ── Surface system ── */
   .surface-1 {
     background: hsl(var(--surface-1));
-    border: 1px solid hsl(var(--border) / 0.7);
+    border: 1px solid hsl(var(--border) / 0.6);
     box-shadow: var(--shadow-md);
     border-radius: var(--radius);
     transition: box-shadow 200ms ease-out, transform 200ms ease-out;
@@ -171,13 +183,13 @@
 
   .surface-2 {
     background: hsl(var(--surface-2));
-    border: 1px solid hsl(var(--border) / 0.4);
+    border: 1px solid hsl(var(--border) / 0.35);
     border-radius: var(--radius);
   }
 
   .surface-hero {
     background: hsl(var(--surface-1));
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: 1px solid hsl(var(--border) / 0.4);
     box-shadow: var(--shadow-lg);
     border-radius: 16px;
     position: relative;
@@ -211,12 +223,12 @@
   /* ── Layout ── */
   .page-container {
     @apply mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8;
-    max-width: 1060px;
+    max-width: 1120px;
     position: relative;
     z-index: 1;
   }
 
-  /* Brand header wash — subtle radial glow behind page header */
+  /* Brand "paper glow" wash — subtle radial behind page header */
   .brand-wash {
     position: relative;
   }
