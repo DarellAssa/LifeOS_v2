@@ -129,19 +129,19 @@ export default function TodayPage() {
               {/* Metric chips — calm amber for overdue */}
               <div className="flex flex-wrap gap-2">
                 {overdue.length > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-[hsl(var(--attention-muted))] border border-[hsl(var(--attention)/0.2)] px-3 py-1.5 text-xs text-[hsl(var(--attention-foreground))] font-medium">
+                  <div className="pill-chip !bg-[hsl(var(--attention-muted))] !text-[hsl(var(--attention-foreground))] border border-[hsl(var(--attention)/0.15)]">
                     <Clock className="h-3 w-3" />
                     {overdue.length} overdue
                   </div>
                 )}
                 {inboxCount > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-muted border border-border/50 px-3 py-1.5 text-xs text-muted-foreground">
+                  <div className="pill-chip">
                     <Inbox className="h-3 w-3" />
                     {inboxCount} inbox
                   </div>
                 )}
                 {scheduledCount > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-muted border border-border/50 px-3 py-1.5 text-xs text-muted-foreground">
+                  <div className="pill-chip">
                     <Calendar className="h-3 w-3" />
                     {scheduledCount} scheduled
                   </div>
@@ -169,12 +169,12 @@ export default function TodayPage() {
             {nextActions.length > 0 && (
               <section className="space-y-3">
                 <h2 className="section-label">Next up</h2>
-                <div className="surface-1 divide-y divide-border/50 overflow-hidden">
-                  {nextActions.map(item => (
+                <div className="surface-1 overflow-hidden">
+                  {nextActions.map((item, i) => (
                     <button
                       key={item.id}
                       onClick={() => navigate(item.route)}
-                      className="flex items-center gap-3 w-full px-4 py-3.5 text-left transition-all duration-150 hover:bg-accent/40 group"
+                      className={`flex items-center gap-3 w-full px-4 py-3.5 text-left row-hover group ${i > 0 ? 'border-t border-border/30' : ''}`}
                     >
                       <div className={`h-2 w-2 rounded-full shrink-0 ${item.urgent ? 'bg-[hsl(var(--attention))]' : 'bg-primary/40'}`} />
                       <span className="text-sm flex-1 truncate">{item.title}</span>
@@ -190,7 +190,7 @@ export default function TodayPage() {
               <section className="space-y-3">
                 <button
                   onClick={() => setBriefingOpen(!briefingOpen)}
-                  className="flex items-center gap-2.5 w-full text-left rounded-2xl px-4 py-3 transition-all duration-150 hover:bg-accent/40 surface-2"
+                  className="flex items-center gap-2.5 w-full text-left rounded-[18px] px-4 py-3.5 transition-all duration-150 surface-2 row-hover"
                 >
                   <Sparkles className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-sm font-medium flex-1">Daily Briefing</span>
