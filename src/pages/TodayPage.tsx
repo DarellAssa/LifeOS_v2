@@ -67,29 +67,29 @@ export default function TodayPage() {
   }, [overdue, inboxCount, remainingCount]);
 
   return (
-    <div className="space-y-8" data-tour="dashboard-header">
+    <div className="space-y-6" data-tour="dashboard-header">
       {/* Greeting */}
       <div className="space-y-1">
         <h1 className="page-title">
-          Good {greeting}{userName ? `, ${userName}` : ''} ☀️
+          Good {greeting}{userName ? `, ${userName}` : ''}
         </h1>
         <p className="text-sm text-muted-foreground">{format(new Date(), 'EEEE, MMMM d')}</p>
         {statusLine && !hasNoData && (
-          <p className="text-sm text-muted-foreground mt-1">{statusLine}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{statusLine}</p>
         )}
       </div>
 
       {/* Empty state */}
       {hasNoData && (
-        <div className="surface-hero py-16 px-8 text-center space-y-6">
+        <div className="surface-hero p-10 text-center space-y-5">
           <div className="flex justify-center">
-            <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <Leaf className="h-7 w-7 text-primary" />
+            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Leaf className="h-6 w-6 text-primary" />
             </div>
           </div>
-          <div className="space-y-2">
-            <h2 className="text-xl font-display font-medium">Welcome to LifeOS</h2>
-            <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
+          <div className="space-y-1.5">
+            <h2 className="text-lg font-semibold">Welcome to LifeOS</h2>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
               A calm space to organize your life. Start by capturing a thought or adding your first task.
             </p>
           </div>
@@ -109,57 +109,55 @@ export default function TodayPage() {
       )}
 
       {!hasNoData && (
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* MAIN COLUMN: Hero + Next Up */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid gap-5 lg:grid-cols-3">
+          {/* MAIN COLUMN */}
+          <div className="lg:col-span-2 space-y-5">
             {/* Hero Focus Card */}
-            <div className="surface-hero p-6 sm:p-8 space-y-5">
-              <div className="space-y-1.5">
-                <p className="section-label">Today's Focus</p>
-                <p className="text-sm text-foreground leading-relaxed">
-                  {overdue.length > 0
-                    ? `You have ${overdue.length} overdue item${overdue.length > 1 ? 's' : ''} to clear.`
-                    : remainingCount > 0
-                    ? `${remainingCount} task${remainingCount > 1 ? 's' : ''} on your plate today.`
-                    : "Nothing urgent — a good day to plan ahead."
-                  }
-                </p>
+            <div className="surface-hero p-5 sm:p-6 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                </div>
+                <div className="space-y-1 flex-1 min-w-0">
+                  <p className="section-label">Today's Focus</p>
+                  <p className="text-sm text-foreground">
+                    {overdue.length > 0
+                      ? `You have ${overdue.length} overdue item${overdue.length > 1 ? 's' : ''} to clear.`
+                      : remainingCount > 0
+                      ? `${remainingCount} task${remainingCount > 1 ? 's' : ''} on your plate today.`
+                      : "Nothing urgent — a good day to plan ahead."
+                    }
+                  </p>
+                </div>
               </div>
 
-              {/* Metric chips — calm amber for overdue */}
+              {/* Metric chips */}
               <div className="flex flex-wrap gap-2">
                 {overdue.length > 0 && (
-                  <div className="pill-chip !bg-[hsl(var(--attention-muted))] !text-[hsl(var(--attention-foreground))] border border-[hsl(var(--attention)/0.15)]">
-                    <Clock className="h-3 w-3" />
-                    {overdue.length} overdue
-                  </div>
+                  <span className="pill-chip !bg-[hsl(var(--attention-muted))] !text-[hsl(var(--attention-foreground))]">
+                    <Clock className="h-3 w-3" /> {overdue.length} overdue
+                  </span>
                 )}
                 {inboxCount > 0 && (
-                  <div className="pill-chip">
-                    <Inbox className="h-3 w-3" />
-                    {inboxCount} inbox
-                  </div>
+                  <span className="pill-chip"><Inbox className="h-3 w-3" /> {inboxCount} inbox</span>
                 )}
                 {scheduledCount > 0 && (
-                  <div className="pill-chip">
-                    <Calendar className="h-3 w-3" />
-                    {scheduledCount} scheduled
-                  </div>
+                  <span className="pill-chip"><Calendar className="h-3 w-3" /> {scheduledCount} scheduled</span>
                 )}
               </div>
 
-              {/* CTAs — overdue uses amber, not red */}
-              <div className="flex flex-wrap gap-3">
+              {/* CTAs */}
+              <div className="flex flex-wrap gap-2.5">
                 {heroAction && (
                   <Button
+                    size="sm"
                     onClick={() => navigate(heroAction.route)}
-                    className={`gap-2 ${heroAction.isOverdue ? 'bg-[hsl(var(--attention))] hover:bg-[hsl(var(--attention)/0.9)] text-white shadow-sm' : ''}`}
+                    className={`gap-2 ${heroAction.isOverdue ? 'bg-[hsl(var(--attention))] hover:bg-[hsl(var(--attention)/0.9)] text-white' : ''}`}
                   >
-                    {heroAction.label}
-                    <ArrowRight className="h-4 w-4" />
+                    {heroAction.label} <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => navigate('/plan')} className="gap-2">
+                <Button size="sm" variant="outline" onClick={() => navigate('/plan')} className="gap-2">
                   Open Plan
                 </Button>
               </div>
@@ -167,14 +165,14 @@ export default function TodayPage() {
 
             {/* Next Up */}
             {nextActions.length > 0 && (
-              <section className="space-y-3">
-                <h2 className="section-label">Next up</h2>
+              <section className="space-y-2.5">
+                <h2 className="section-label px-1">Next up</h2>
                 <div className="surface-1 overflow-hidden">
                   {nextActions.map((item, i) => (
                     <button
                       key={item.id}
                       onClick={() => navigate(item.route)}
-                      className={`flex items-center gap-3 w-full px-4 py-3.5 text-left row-hover group ${i > 0 ? 'border-t border-border/30' : ''}`}
+                      className={`flex items-center gap-3 w-full px-4 py-3 text-left row-hover group ${i > 0 ? 'border-t border-border/40' : ''}`}
                     >
                       <div className={`h-2 w-2 rounded-full shrink-0 ${item.urgent ? 'bg-[hsl(var(--attention))]' : 'bg-primary/40'}`} />
                       <span className="text-sm flex-1 truncate">{item.title}</span>
@@ -184,73 +182,71 @@ export default function TodayPage() {
                 </div>
               </section>
             )}
-
-            {/* Daily Briefing — collapsible */}
-            {showBriefingToggle && (
-              <section className="space-y-3">
-                <button
-                  onClick={() => setBriefingOpen(!briefingOpen)}
-                  className="flex items-center gap-2.5 w-full text-left rounded-[18px] px-4 py-3.5 transition-all duration-150 surface-2 row-hover"
-                >
-                  <Sparkles className="h-4 w-4 text-primary shrink-0" />
-                  <span className="text-sm font-medium flex-1">Daily Briefing</span>
-                  {briefingOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                </button>
-                {briefingOpen && (
-                  <div className="mt-2">
-                    <DailyBriefingCard onOpenCopilot={handleOpenCopilot} />
-                  </div>
-                )}
-              </section>
-            )}
           </div>
 
-          {/* RIGHT RAIL: Schedule + Inbox — only on lg+ */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Schedule today */}
+          {/* RIGHT RAIL */}
+          <div className="space-y-5">
+            {/* Schedule */}
             {todayAgenda.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between">
+              <section className="space-y-2.5">
+                <div className="flex items-center justify-between px-1">
                   <h2 className="section-label">Schedule</h2>
                   <button onClick={() => navigate('/calendar')} className="text-[11px] text-primary hover:underline">Calendar</button>
                 </div>
-                <div className="space-y-1">
-                  {todayAgenda.slice(0, 4).map(item => (
-                    <div key={item.id} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 hover:bg-accent/40 transition-colors">
+                <div className="surface-1 overflow-hidden">
+                  {todayAgenda.slice(0, 4).map((item, i) => (
+                    <div key={item.id} className={`flex items-center gap-2.5 px-3.5 py-2.5 row-hover ${i > 0 ? 'border-t border-border/40' : ''}`}>
                       <div className="h-1.5 w-1.5 rounded-full bg-primary/50 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate">{item.title}</p>
-                        <p className="text-[10px] text-muted-foreground tabular-nums">
-                          {format(new Date(item.startDateTime), 'h:mm a')}
-                        </p>
-                      </div>
+                      <span className="text-sm flex-1 truncate">{item.title}</span>
+                      <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                        {format(new Date(item.startDateTime), 'h:mm a')}
+                      </span>
                     </div>
                   ))}
                 </div>
               </section>
             )}
 
-            {/* Quick Capture / Inbox */}
-            <section className="space-y-3">
-              <h2 className="section-label">Capture</h2>
-              <div className="space-y-2">
+            {/* Capture */}
+            <section className="space-y-2.5">
+              <h2 className="section-label px-1">Capture</h2>
+              <div className="surface-1 overflow-hidden p-3 space-y-2">
                 <button
                   onClick={() => navigate('/capture')}
-                  className="flex items-center gap-2 w-full rounded-xl border border-dashed border-border/70 px-3.5 py-3 text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground hover:bg-accent/30 transition-all duration-150"
+                  className="flex items-center gap-2 w-full rounded-xl bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
                   <Inbox className="h-4 w-4 shrink-0" />
                   <span>Capture something…</span>
                 </button>
                 {inboxCount > 0 && (
-                  <div className="flex items-center justify-between rounded-xl bg-accent/30 px-3.5 py-2.5 text-sm">
-                    <span className="text-muted-foreground text-xs">Inbox: {inboxCount}</span>
-                    <Button size="sm" variant="outline" onClick={() => navigate('/capture')} className="text-xs h-7 px-2.5">
+                  <div className="flex items-center justify-between px-1 py-1">
+                    <span className="text-xs text-muted-foreground">Inbox: {inboxCount}</span>
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/capture')} className="text-xs h-7 px-2.5">
                       Triage
                     </Button>
                   </div>
                 )}
               </div>
             </section>
+
+            {/* Daily Briefing */}
+            {showBriefingToggle && (
+              <section className="space-y-2.5">
+                <button
+                  onClick={() => setBriefingOpen(!briefingOpen)}
+                  className="flex items-center gap-2 w-full text-left surface-1 px-4 py-3 row-hover"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span className="text-sm font-medium flex-1">Daily Briefing</span>
+                  {briefingOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                </button>
+                {briefingOpen && (
+                  <div className="mt-1">
+                    <DailyBriefingCard onOpenCopilot={handleOpenCopilot} />
+                  </div>
+                )}
+              </section>
+            )}
           </div>
         </div>
       )}
