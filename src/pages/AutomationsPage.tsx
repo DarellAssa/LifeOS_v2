@@ -195,7 +195,7 @@ export default function AutomationsPage() {
             const StatusIcon = STATUS_ICONS[log.status] || CheckCircle;
             return (
               <div key={log.id} className="flex items-center gap-3 rounded-md border border-border p-3 text-sm">
-                <StatusIcon className={`h-4 w-4 shrink-0 ${log.status === 'success' ? 'text-green-500' : log.status === 'failed' ? 'text-destructive' : 'text-muted-foreground'}`} />
+                <StatusIcon className={`h-4 w-4 shrink-0 ${log.status === 'success' ? 'text-success' : log.status === 'failed' ? 'text-destructive' : 'text-muted-foreground'}`} />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{getRuleName(log.ruleId)}</p>
                   <p className="text-[10px] text-muted-foreground">

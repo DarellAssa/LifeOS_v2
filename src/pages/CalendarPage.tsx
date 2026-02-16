@@ -15,16 +15,16 @@ import { format, addDays, addMonths, subMonths, startOfMonth, endOfMonth, startO
 type CalendarView = 'day' | 'week' | 'month' | 'agenda';
 
 const categoryEventColors: Record<EventCategory, string> = {
-  work: 'bg-blue-500/20 border-blue-500/30 text-blue-700 dark:text-blue-300',
-  personal: 'bg-purple-500/20 border-purple-500/30 text-purple-700 dark:text-purple-300',
-  study: 'bg-amber-500/20 border-amber-500/30 text-amber-700 dark:text-amber-300',
-  health: 'bg-green-500/20 border-green-500/30 text-green-700 dark:text-green-300',
+  work: 'bg-ai-muted border-ai/30 text-ai',
+  personal: 'bg-primary/10 border-primary/30 text-primary',
+  study: 'bg-[hsl(var(--attention-muted))] border-[hsl(var(--attention)/0.3)] text-[hsl(var(--attention-foreground))]',
+  health: 'bg-success/10 border-success/30 text-success',
   custom: 'bg-muted border-border text-foreground',
 };
 
 const focusStatusColors: Record<FocusBlockStatus, string> = {
   planned: 'bg-primary/15 border-primary/30 text-primary',
-  done: 'bg-green-500/15 border-green-500/30 text-green-700 dark:text-green-400',
+  done: 'bg-success/15 border-success/30 text-success',
   missed: 'bg-muted border-border text-muted-foreground line-through',
   canceled: 'bg-muted/50 border-border text-muted-foreground line-through opacity-60',
 };
@@ -448,7 +448,7 @@ export default function CalendarPage() {
                     <p className="text-sm font-medium">{format(new Date(item.startDateTime), 'h:mm a')}</p>
                     <p className="text-[10px] text-muted-foreground">{format(new Date(item.endDateTime), 'h:mm a')}</p>
                   </div>
-                  <div className={`h-10 w-1 rounded-full shrink-0 ${item.type === 'focus' ? 'bg-primary' : 'bg-blue-500'}`} />
+                  <div className={`h-10 w-1 rounded-full shrink-0 ${item.type === 'focus' ? 'bg-primary' : 'bg-ai'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       {item.type === 'focus' && <Zap className="h-3 w-3 text-primary shrink-0" />}
@@ -464,7 +464,7 @@ export default function CalendarPage() {
                   <div className="flex items-center gap-1 shrink-0">
                     {item.type === 'focus' && item.status === 'planned' && (
                       <>
-                        <button onClick={e => { e.stopPropagation(); markFocusBlockCompleted(item.id); }} className="text-green-600 hover:text-green-700 p-1" title="Complete">
+                        <button onClick={e => { e.stopPropagation(); markFocusBlockCompleted(item.id); }} className="text-success hover:text-success/80 p-1" title="Complete">
                           <CheckSquare className="h-3.5 w-3.5" />
                         </button>
                         <button onClick={e => { e.stopPropagation(); markFocusBlockSkipped(item.id); }} className="text-muted-foreground hover:text-foreground p-1" title="Missed">

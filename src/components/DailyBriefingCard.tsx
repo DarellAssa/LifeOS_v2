@@ -115,7 +115,7 @@ export function DailyBriefingCard({ onOpenCopilot }: DailyBriefingCardProps) {
 
   const severityDot = (s: string) => {
     if (s === 'high') return 'bg-destructive';
-    if (s === 'med' || s === 'medium') return 'bg-amber-500';
+    if (s === 'med' || s === 'medium') return 'bg-[hsl(var(--attention))]';
     return 'bg-muted-foreground';
   };
 
@@ -200,7 +200,7 @@ export function DailyBriefingCard({ onOpenCopilot }: DailyBriefingCardProps) {
                 <div className="space-y-1">
                   {briefing.schedule.slice(0, 5).map((item, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm rounded border border-border p-2">
-                      <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${item.kind === 'focus' ? 'bg-primary' : 'bg-blue-500'}`} />
+                      <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${item.kind === 'focus' ? 'bg-primary' : 'bg-ai'}`} />
                       <span className="flex-1 truncate text-xs">{item.title}</span>
                       <span className="text-[10px] text-muted-foreground shrink-0">
                         {formatTime(item.start_at)} – {formatTime(item.end_at)}

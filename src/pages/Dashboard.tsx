@@ -19,10 +19,10 @@ import { DailyBriefingCard } from '@/components/DailyBriefingCard';
 import { mergePreferences } from '@/types/preferences';
 
 const statusColors: Record<GoalDisplayStatus, string> = {
-  'On track': 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
-  'Behind': 'bg-destructive/10 text-destructive border-destructive/20',
-  'Overdue': 'bg-destructive/10 text-destructive border-destructive/20',
-  'Not started': 'bg-muted text-muted-foreground border-border',
+  'On track': 'status-success',
+  'Behind': 'status-danger',
+  'Overdue': 'status-danger',
+  'Not started': 'status-neutral',
   'Completed': 'bg-primary/10 text-primary border-primary/20',
 };
 
@@ -272,8 +272,8 @@ export default function Dashboard() {
       {topAlerts.length > 0 && (
         <div className="space-y-2">
           {topAlerts.map(n => (
-            <div key={n.id} className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${n.severity === 'critical' ? 'border-destructive/30 bg-destructive/5' : n.severity === 'warning' ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-border'}`}>
-              <div className={`h-2 w-2 rounded-full shrink-0 ${n.severity === 'critical' ? 'bg-destructive' : n.severity === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'}`} />
+            <div key={n.id} className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${n.severity === 'critical' ? 'border-destructive/30 bg-destructive/5' : n.severity === 'warning' ? 'border-[hsl(var(--attention)/0.3)] bg-[hsl(var(--attention-muted))]' : 'border-border'}`}>
+              <div className={`h-2 w-2 rounded-full shrink-0 ${n.severity === 'critical' ? 'bg-destructive' : n.severity === 'warning' ? 'bg-[hsl(var(--attention))]' : 'bg-primary/50'}`} />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">{n.title}</p>
                 <p className="text-[10px] text-muted-foreground truncate">{n.message}</p>
@@ -419,7 +419,7 @@ export default function Dashboard() {
               const isCurrent = currentItem?.id === item.id;
               return (
                 <div key={item.id} className={`flex items-center gap-3 rounded-md border p-2.5 text-sm ${isCurrent ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${item.type === 'focus' ? 'bg-primary' : 'bg-blue-500'} ${isCurrent ? 'animate-pulse' : ''}`} />
+                  <div className={`h-2 w-2 rounded-full shrink-0 ${item.type === 'focus' ? 'bg-primary' : 'bg-ai'} ${isCurrent ? 'animate-pulse' : ''}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
                       {item.type === 'focus' && <Zap className="h-3 w-3 text-primary shrink-0" />}
@@ -598,7 +598,7 @@ export default function Dashboard() {
                   const rule = data.automationRules.find(r => r.id === log.ruleId);
                   return (
                     <div key={log.id} className={`flex items-center gap-2 text-xs rounded-md border p-2 ${log.status === 'failed' ? 'border-destructive/20 bg-destructive/5' : 'border-border'}`}>
-                      <div className={`h-1.5 w-1.5 rounded-full ${log.status === 'success' ? 'bg-green-500' : log.status === 'failed' ? 'bg-destructive' : 'bg-muted-foreground'}`} />
+                      <div className={`h-1.5 w-1.5 rounded-full ${log.status === 'success' ? 'bg-success' : log.status === 'failed' ? 'bg-destructive' : 'bg-muted-foreground'}`} />
                       <span className="flex-1 truncate">{rule?.name || 'Unknown'}</span>
                       <span className="text-muted-foreground">{log.status}</span>
                     </div>

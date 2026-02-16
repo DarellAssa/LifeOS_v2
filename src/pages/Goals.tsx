@@ -18,16 +18,16 @@ import { computeGoalProgress, getGoalDisplayStatus } from '@/lib/stats';
 import { differenceInDays, format } from 'date-fns';
 
 const categoryColors: Record<GoalCategory, string> = {
-  health: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
-  career: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
-  finance: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
-  study: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
-  personal: 'bg-pink-500/10 text-pink-700 dark:text-pink-400 border-pink-500/20',
+  health: 'bg-success/10 text-success border-success/20',
+  career: 'bg-ai-muted text-ai border-ai/20',
+  finance: 'bg-[hsl(var(--attention-muted))] text-[hsl(var(--attention-foreground))] border-[hsl(var(--attention)/0.2)]',
+  study: 'bg-primary/10 text-primary border-primary/20',
+  personal: 'bg-accent text-accent-foreground border-accent-foreground/20',
   custom: 'bg-muted text-muted-foreground border-border',
 };
 
 const statusColors: Record<GoalDisplayStatus, string> = {
-  'On track': 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
+  'On track': 'bg-success/10 text-success border-success/20',
   'Behind': 'bg-destructive/10 text-destructive border-destructive/20',
   'Overdue': 'bg-destructive/10 text-destructive border-destructive/20',
   'Not started': 'bg-muted text-muted-foreground border-border',

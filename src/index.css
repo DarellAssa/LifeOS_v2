@@ -8,35 +8,35 @@
   :root {
     /* ═══ LifeOS "Dawn" — Warm daylight on paper ═══ */
 
-    /* Backgrounds — warm off-white paper */
-    --background: 34 30% 97%;              /* #FBF7F2 vibe */
-    --foreground: 25 20% 16%;              /* deep warm charcoal */
+    /* Backgrounds — warm paper #FBF7F1 */
+    --background: 36 50% 96.5%;
+    --foreground: 213 13% 14%;             /* #1F2328 warm charcoal */
 
-    /* Surfaces — true white with warmth */
-    --card: 36 25% 99.5%;                  /* warm white surface */
-    --card-foreground: 25 20% 16%;
+    /* Surfaces — true warm white */
+    --card: 0 0% 100%;                     /* pure white surface */
+    --card-foreground: 213 13% 14%;
 
-    --popover: 36 25% 99.5%;
-    --popover-foreground: 25 20% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 13% 14%;
 
-    /* Primary — warm sunrise orange (ONE accent, no purple) */
-    --primary: 24 82% 54%;                 /* ~#E97A2B */
+    /* Primary — tangerine #E9892F */
+    --primary: 29 83% 55%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary — soft warm neutral */
     --secondary: 34 18% 94%;
-    --secondary-foreground: 25 20% 16%;
+    --secondary-foreground: 213 13% 14%;
 
-    /* Muted — warm sand */
-    --muted: 34 16% 92%;                   /* #F3EEE6 vibe */
-    --muted-foreground: 25 8% 48%;         /* warm readable gray */
+    /* Muted — warm sand #F3EEE6 */
+    --muted: 37 35% 93%;
+    --muted-foreground: 218 5% 44%;        /* #6B6F76 */
 
-    /* Accent — SAME family as primary (warm tint, not lavender) */
-    --accent: 24 40% 95%;                  /* warm orange tint */
-    --accent-foreground: 24 70% 38%;       /* readable warm brown */
+    /* Accent — warm primary tint for selection/hover */
+    --accent: 29 40% 95%;
+    --accent-foreground: 29 70% 38%;
 
-    /* Destructive — calm red */
-    --destructive: 0 55% 50%;
+    /* Destructive — muted brick #C84C3A */
+    --destructive: 8 56% 51%;
     --destructive-foreground: 0 0% 100%;
 
     /* Status colors */
@@ -45,39 +45,44 @@
     --attention-muted: 30 60% 95%;
 
     --success: 152 40% 44%;
-    --success-foreground: 0 0% 100%;
+    --success-foreground: 152 40% 20%;
 
     --warning: 38 55% 50%;
-    --warning-foreground: 0 0% 100%;
+    --warning-foreground: 38 70% 20%;
 
-    /* Borders & inputs */
-    --border: 34 14% 89%;                  /* warm subtle border */
-    --input: 34 16% 92%;                   /* warm input bg */
-    --ring: 24 82% 54%;                    /* matches primary */
+    /* AI / Copilot indigo accent — used sparingly */
+    --ai: 235 73% 63%;                     /* #5B67E6 */
+    --ai-foreground: 0 0% 100%;
+    --ai-muted: 235 50% 95%;
+
+    /* Borders & inputs — warm #E8DFD3 */
+    --border: 34 30% 87%;
+    --input: 37 35% 93%;
+    --ring: 29 83% 55%;                    /* matches primary */
 
     --radius: 14px;
 
     /* Surface layers */
-    --surface-1: 36 25% 99.5%;             /* card white */
-    --surface-2: 34 20% 96%;               /* panel tint */
+    --surface-1: 0 0% 100%;               /* card white */
+    --surface-2: 36 30% 97%;              /* panel tint */
 
     /* Shadows — warm tone */
     --shadow-sm: 0 1px 2px hsl(30 15% 40% / 0.05);
     --shadow-md: 0 1px 3px hsl(30 15% 40% / 0.06), 0 4px 12px -2px hsl(30 15% 40% / 0.06);
-    --shadow-lg: 0 2px 6px hsl(30 15% 40% / 0.07), 0 8px 24px -4px hsl(30 15% 40% / 0.08);
+    --shadow-lg: 0 2px 6px hsl(30 15% 40% / 0.08), 0 10px 28px -4px hsl(30 15% 40% / 0.08);
 
-    /* Brand gradient — subtle "paper glow" behind headers */
-    --brand-gradient: radial-gradient(ellipse 90% 50% at 50% -5%, hsl(24 82% 54% / 0.06) 0%, transparent 65%);
+    /* Brand "aurora glow" — subtle radial behind headers */
+    --brand-gradient: radial-gradient(ellipse 90% 50% at 50% -5%, hsl(29 83% 55% / 0.06) 0%, transparent 65%);
 
     /* Sidebar */
-    --sidebar-background: 34 20% 96%;
-    --sidebar-foreground: 25 8% 48%;
-    --sidebar-primary: 24 82% 54%;
+    --sidebar-background: 36 30% 97%;
+    --sidebar-foreground: 218 5% 44%;
+    --sidebar-primary: 29 83% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 24 40% 95%;
-    --sidebar-accent-foreground: 24 70% 38%;
-    --sidebar-border: 34 14% 90%;
-    --sidebar-ring: 24 82% 54%;
+    --sidebar-accent: 29 40% 95%;
+    --sidebar-accent-foreground: 29 70% 38%;
+    --sidebar-border: 34 30% 90%;
+    --sidebar-ring: 29 83% 55%;
   }
 
   .dark {
@@ -91,7 +96,7 @@
     --popover: 25 12% 12%;
     --popover-foreground: 34 15% 85%;
 
-    --primary: 24 78% 56%;
+    --primary: 29 78% 56%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 25 12% 15%;
@@ -100,10 +105,10 @@
     --muted: 25 10% 16%;
     --muted-foreground: 34 8% 52%;
 
-    --accent: 24 30% 18%;
-    --accent-foreground: 24 50% 72%;
+    --accent: 29 30% 18%;
+    --accent-foreground: 29 50% 72%;
 
-    --destructive: 0 50% 48%;
+    --destructive: 8 50% 48%;
     --destructive-foreground: 0 0% 100%;
 
     --attention: 30 70% 55%;
@@ -111,14 +116,18 @@
     --attention-muted: 30 50% 18%;
 
     --success: 152 40% 42%;
-    --success-foreground: 0 0% 100%;
+    --success-foreground: 152 30% 80%;
 
     --warning: 38 65% 48%;
-    --warning-foreground: 0 0% 100%;
+    --warning-foreground: 38 50% 88%;
+
+    --ai: 235 65% 65%;
+    --ai-foreground: 0 0% 100%;
+    --ai-muted: 235 30% 18%;
 
     --border: 25 10% 18%;
     --input: 25 10% 16%;
-    --ring: 24 78% 56%;
+    --ring: 29 78% 56%;
 
     --surface-1: 25 12% 12%;
     --surface-2: 25 12% 10%;
@@ -127,16 +136,16 @@
     --shadow-md: 0 1px 3px hsl(0 0% 0% / 0.25), 0 4px 12px -2px hsl(0 0% 0% / 0.2);
     --shadow-lg: 0 2px 6px hsl(0 0% 0% / 0.3), 0 8px 24px -4px hsl(0 0% 0% / 0.25);
 
-    --brand-gradient: radial-gradient(ellipse 90% 50% at 50% -5%, hsl(24 78% 56% / 0.04) 0%, transparent 65%);
+    --brand-gradient: radial-gradient(ellipse 90% 50% at 50% -5%, hsl(29 78% 56% / 0.04) 0%, transparent 65%);
 
     --sidebar-background: 25 12% 8%;
     --sidebar-foreground: 34 8% 50%;
-    --sidebar-primary: 24 78% 56%;
+    --sidebar-primary: 29 78% 56%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 24 30% 16%;
-    --sidebar-accent-foreground: 24 50% 65%;
+    --sidebar-accent: 29 30% 16%;
+    --sidebar-accent-foreground: 29 50% 65%;
     --sidebar-border: 25 10% 15%;
-    --sidebar-ring: 24 78% 56%;
+    --sidebar-ring: 29 78% 56%;
   }
 }
 
@@ -154,15 +163,15 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Global transitions */
+  /* Global transitions — smooth but not heavy */
   button, a, [role="button"] {
     transition: all 150ms ease-out;
   }
 
-  /* Focus ring — matches primary */
+  /* Focus ring — soft primary glow */
   :focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 3.5px hsl(var(--ring) / 0.3);
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 3.5px hsl(var(--ring) / 0.25);
   }
 }
 
@@ -175,23 +184,26 @@
   /* ── Surface system ── */
   .surface-1 {
     background: hsl(var(--surface-1));
-    border: 1px solid hsl(var(--border) / 0.6);
+    border: 1px solid hsl(var(--border) / 0.5);
     box-shadow: var(--shadow-md);
     border-radius: var(--radius);
     transition: box-shadow 200ms ease-out, transform 200ms ease-out;
   }
+  .surface-1:hover {
+    box-shadow: var(--shadow-lg);
+  }
 
   .surface-2 {
     background: hsl(var(--surface-2));
-    border: 1px solid hsl(var(--border) / 0.35);
+    border: 1px solid hsl(var(--border) / 0.3);
     border-radius: var(--radius);
   }
 
   .surface-hero {
     background: hsl(var(--surface-1));
-    border: 1px solid hsl(var(--border) / 0.4);
+    border: 1px solid hsl(var(--border) / 0.35);
     box-shadow: var(--shadow-lg);
-    border-radius: 16px;
+    border-radius: 18px;
     position: relative;
     overflow: hidden;
   }
@@ -210,14 +222,15 @@
 
   /* ── Typography ── */
   .section-label {
-    @apply font-medium uppercase text-muted-foreground;
+    @apply font-semibold uppercase text-muted-foreground;
     font-size: 11px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
   }
 
   .page-title {
-    @apply font-semibold text-foreground tracking-tight;
+    @apply font-bold text-foreground;
     font-size: clamp(24px, 3vw, 30px);
+    letter-spacing: -0.025em;
   }
 
   /* ── Layout ── */
@@ -228,7 +241,7 @@
     z-index: 1;
   }
 
-  /* Brand "paper glow" wash — subtle radial behind page header */
+  /* Aurora glow header wash — subtle radial behind page header */
   .brand-wash {
     position: relative;
   }
@@ -238,7 +251,7 @@
     top: 0;
     left: 0;
     right: 0;
-    height: 200px;
+    height: 220px;
     background: var(--brand-gradient);
     pointer-events: none;
     z-index: 0;
@@ -252,16 +265,35 @@
     background: hsl(var(--muted) / 0.5);
   }
 
-  /* Pill chip */
+  /* Pill chip — soft tinted background */
   .pill-chip {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
     background: hsl(var(--muted));
     color: hsl(var(--muted-foreground));
   }
 
-  /* LifeOS divider */
+  /* LifeOS signature divider */
   .lifeos-divider {
     height: 1px;
     background: linear-gradient(90deg, transparent 0%, hsl(var(--border)) 30%, hsl(var(--primary) / 0.12) 50%, hsl(var(--border)) 70%, transparent 100%);
+  }
+
+  /* ── Semantic status utilities ── */
+  .status-success {
+    @apply bg-success/10 text-success border-success/20;
+  }
+  .status-warning {
+    @apply bg-[hsl(var(--attention-muted))] text-[hsl(var(--attention-foreground))] border-[hsl(var(--attention)/0.2)];
+  }
+  .status-danger {
+    @apply bg-destructive/10 text-destructive border-destructive/20;
+  }
+  .status-neutral {
+    @apply bg-muted text-muted-foreground border-border;
+  }
+  .status-ai {
+    background: hsl(var(--ai-muted));
+    color: hsl(var(--ai));
+    border-color: hsl(var(--ai) / 0.2);
   }
 }

@@ -78,7 +78,7 @@ function SchedulePreviewCard({
         {operations.map((op, i) => (
           <div key={i} className="flex items-center gap-2 text-xs">
             <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded ${
-              op.op === 'create' ? 'bg-primary/10 text-primary' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+              op.op === 'create' ? 'bg-primary/10 text-primary' : 'bg-[hsl(var(--attention-muted))] text-[hsl(var(--attention-foreground))]'
             }`}>
               {op.op.toUpperCase()}
             </span>
@@ -100,8 +100,8 @@ function SchedulePreviewCard({
 
       {/* Conflicts */}
       {conflicts && conflicts.length > 0 && (
-        <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 space-y-1">
-          <div className="flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+        <div className="rounded border border-[hsl(var(--attention)/0.3)] bg-[hsl(var(--attention-muted))] p-2 space-y-1">
+          <div className="flex items-center gap-1 text-[11px] font-medium text-[hsl(var(--attention-foreground))]">
             <AlertTriangle className="h-3 w-3" />
             {conflicts.length} conflict{conflicts.length > 1 ? 's' : ''} detected
           </div>
@@ -136,16 +136,16 @@ function SchedulePreviewCard({
 // ── Action label helpers ──
 const ACTION_LABELS: Record<string, { label: string; icon: typeof FileText; color: string }> = {
   convert_task: { label: 'Task', icon: ListChecks, color: 'text-primary' },
-  convert_note: { label: 'Note', icon: FileText, color: 'text-blue-500' },
-  convert_event: { label: 'Event', icon: Calendar, color: 'text-purple-500' },
-  convert_goal: { label: 'Goal', icon: Target, color: 'text-amber-500' },
+  convert_note: { label: 'Note', icon: FileText, color: 'text-ai' },
+  convert_event: { label: 'Event', icon: Calendar, color: 'text-ai' },
+  convert_goal: { label: 'Goal', icon: Target, color: 'text-[hsl(var(--attention))]' },
   archive: { label: 'Archive', icon: Archive, color: 'text-muted-foreground' },
   leave: { label: 'Skip', icon: X, color: 'text-muted-foreground' },
 };
 
 const CONFIDENCE_STYLES: Record<string, string> = {
   high: 'text-primary bg-primary/10',
-  med: 'text-amber-600 dark:text-amber-400 bg-amber-500/10',
+  med: 'text-[hsl(var(--attention-foreground))] bg-[hsl(var(--attention-muted))]',
   low: 'text-muted-foreground bg-muted',
 };
 
@@ -187,16 +187,16 @@ function InboxTriageReviewCard({
       {/* Summary chips */}
       <div className="flex flex-wrap gap-1.5">
         {summary.convert_task > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">Tasks: {summary.convert_task}</span>}
-        {summary.convert_note > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500">Notes: {summary.convert_note}</span>}
-        {summary.convert_event > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500">Events: {summary.convert_event}</span>}
-        {summary.convert_goal > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500">Goals: {summary.convert_goal}</span>}
+        {summary.convert_note > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-ai-muted text-ai">Notes: {summary.convert_note}</span>}
+        {summary.convert_event > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-ai-muted text-ai">Events: {summary.convert_event}</span>}
+        {summary.convert_goal > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[hsl(var(--attention-muted))] text-[hsl(var(--attention-foreground))]">Goals: {summary.convert_goal}</span>}
         {summary.archive > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Archive: {summary.archive}</span>}
         {summary.leave > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Skip: {summary.leave}</span>}
       </div>
 
       {/* Low confidence warning */}
       {hasLowConfidence && (
-        <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded px-2 py-1">
+        <div className="flex items-center gap-1 text-[10px] text-[hsl(var(--attention-foreground))] bg-[hsl(var(--attention-muted))] border border-[hsl(var(--attention)/0.2)] rounded px-2 py-1">
           <AlertTriangle className="h-3 w-3" />
           Some items have low confidence — review before applying.
         </div>
@@ -327,7 +327,7 @@ function PlanPreviewCard({
             <div className="flex-1 min-w-0">
               <p className="text-xs">{step.label}</p>
               {step.requires_confirmation && (
-                <span className="text-[9px] text-amber-600 dark:text-amber-400">⚠️ Requires confirmation</span>
+                <span className="text-[9px] text-[hsl(var(--attention-foreground))]">⚠️ Requires confirmation</span>
               )}
             </div>
             {executionResult?.toolRuns?.[i] && (
@@ -345,7 +345,7 @@ function PlanPreviewCard({
           <span className="text-primary">+{plan.overall_impact.creates} create{plan.overall_impact.creates > 1 ? 's' : ''}</span>
         )}
         {plan.overall_impact.updates > 0 && (
-          <span className="text-amber-600 dark:text-amber-400">~{plan.overall_impact.updates} update{plan.overall_impact.updates > 1 ? 's' : ''}</span>
+          <span className="text-[hsl(var(--attention-foreground))]">~{plan.overall_impact.updates} update{plan.overall_impact.updates > 1 ? 's' : ''}</span>
         )}
         {(plan.overall_impact.archives || 0) > 0 && (
           <span className="text-muted-foreground">📦 {plan.overall_impact.archives} archive{plan.overall_impact.archives > 1 ? 's' : ''}</span>
