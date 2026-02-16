@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { PageHeader } from '@/components/PageHeader';
 import { Target, Repeat, BarChart3, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -33,33 +34,35 @@ export default function ProgressPage() {
   }, [goals, tasks]);
 
   return (
-    <div className="max-w-xl mx-auto space-y-8 py-2">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Progress</h1>
-        <p className="text-sm text-muted-foreground">Goals, habits & how you're doing</p>
-      </div>
+    <div className="max-w-2xl mx-auto space-y-8 py-2">
+      <PageHeader
+        title="Progress"
+        subtitle="Goals, habits & how you're doing"
+        action={
+          <Button variant="outline" size="sm" onClick={() => navigate('/analytics')} className="gap-1.5">
+            <BarChart3 className="h-3.5 w-3.5" /> Analytics
+          </Button>
+        }
+      />
 
-      {/* Metric chips — inline, no boxes */}
-      <div className="flex gap-6 text-sm">
-        <div>
-          <span className="text-lg font-semibold">{doneThisWeek}</span>
-          <span className="text-muted-foreground ml-1.5">tasks this week</span>
-        </div>
-        <div>
-          <span className="text-lg font-semibold">{topStreak}d</span>
-          <span className="text-muted-foreground ml-1.5">best streak</span>
-        </div>
-        <div>
-          <span className="text-lg font-semibold">{goalsOnTrack}/{goals.filter(g => g.status === 'active').length}</span>
-          <span className="text-muted-foreground ml-1.5">on track</span>
-        </div>
+      {/* Metric chips */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { value: doneThisWeek, label: 'tasks this week' },
+          { value: `${topStreak}d`, label: 'best streak' },
+          { value: `${goalsOnTrack}/${goals.filter(g => g.status === 'active').length}`, label: 'on track' },
+        ].map((m, i) => (
+          <div key={i} className="surface-1 px-4 py-3 text-center">
+            <div className="text-lg font-semibold">{m.value}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">{m.label}</div>
+          </div>
+        ))}
       </div>
 
       {/* Goals */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="section-label flex items-center gap-2">
             <Target className="h-3.5 w-3.5" /> Goals
           </h2>
           <button onClick={() => navigate('/goals')} className="text-xs text-primary hover:underline flex items-center gap-1">
@@ -68,16 +71,16 @@ export default function ProgressPage() {
         </div>
 
         {activeGoals.length === 0 ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">
+          <div className="surface-1 py-12 text-center text-sm text-muted-foreground">
             No active goals yet
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {activeGoals.map(goal => {
+          <div className="surface-1 overflow-hidden">
+            {activeGoals.map((goal, i) => {
               const progress = computeGoalProgress(goal, tasks);
               const status = getGoalDisplayStatus(goal, tasks);
               return (
-                <div key={goal.id} className="py-3 px-1 space-y-2">
+                <div key={goal.id} className={`px-5 py-3.5 space-y-2.5 row-hover ${i > 0 ? 'border-t border-border/25' : ''}`}>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{goal.title}</span>
                     <span className={`text-xs ${status === 'On track' ? 'text-success' : status === 'Behind' ? 'text-destructive' : 'text-muted-foreground'}`}>
@@ -95,8 +98,8 @@ export default function ProgressPage() {
 
       {/* Habits */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="section-label flex items-center gap-2">
             <Repeat className="h-3.5 w-3.5" /> Habits
           </h2>
           <button onClick={() => navigate('/habits')} className="text-xs text-primary hover:underline flex items-center gap-1">
@@ -105,16 +108,16 @@ export default function ProgressPage() {
         </div>
 
         {activeHabits.length === 0 ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">
+          <div className="surface-1 py-12 text-center text-sm text-muted-foreground">
             No habits yet
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {activeHabits.map(habit => {
+          <div className="surface-1 overflow-hidden">
+            {activeHabits.map((habit, i) => {
               const streak = getHabitStreak(habit);
               const loggedToday = habit.logs.includes(todayStr);
               return (
-                <div key={habit.id} className="flex items-center gap-3 py-3 px-1">
+                <div key={habit.id} className={`flex items-center gap-3 px-5 py-3 row-hover ${i > 0 ? 'border-t border-border/25' : ''}`}>
                   <span className="text-sm flex-1">{habit.title}</span>
                   <span className="text-xs text-muted-foreground">{streak}d streak</span>
                   <Button
@@ -131,17 +134,6 @@ export default function ProgressPage() {
             })}
           </div>
         )}
-      </section>
-
-      {/* Insights link */}
-      <section className="flex items-center justify-between py-3">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm">Want deeper insights?</span>
-        </div>
-        <Button size="sm" variant="outline" onClick={() => navigate('/analytics')} className="gap-1">
-          Open Analytics <ChevronRight className="h-3 w-3" />
-        </Button>
       </section>
     </div>
   );

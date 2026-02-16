@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useAppContext } from '@/store/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/PageHeader';
+import { PillTabs } from '@/components/PillTabs';
 import { Plus, Calendar, ChevronRight } from 'lucide-react';
 import { format, addDays, parseISO } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -61,41 +63,34 @@ export default function PlanPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="page-title">Plan</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Tasks & schedule in one place</p>
-        </div>
-        <Button onClick={() => document.getElementById('plan-quick-add')?.focus()} className="gap-2">
-          <Plus className="h-4 w-4" /> Add Task
-        </Button>
-      </div>
+      <PageHeader
+        title="Plan"
+        subtitle="Tasks & schedule in one place"
+        action={
+          <Button onClick={() => document.getElementById('plan-quick-add')?.focus()} className="gap-2">
+            <Plus className="h-4 w-4" /> Add Task
+          </Button>
+        }
+      />
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left: Tasks card */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Segmented control — pill style */}
-          <div className="flex gap-0.5 rounded-full bg-muted p-1">
-            {(['today', 'upcoming', 'all'] as Segment[]).map(s => (
-              <button
-                key={s}
-                onClick={() => setSegment(s)}
-                className={`flex-1 px-3.5 py-1.5 text-sm rounded-full capitalize transition-all duration-150 ${
-                  segment === s
-                    ? 'bg-card text-foreground font-medium shadow-[var(--shadow-sm)]'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          {/* Pill Tabs */}
+          <PillTabs
+            tabs={[
+              { value: 'today', label: 'Today' },
+              { value: 'upcoming', label: 'Upcoming' },
+              { value: 'all', label: 'All' },
+            ]}
+            active={segment}
+            onChange={(v) => setSegment(v as Segment)}
+          />
 
           {/* Task list card */}
           <div className="surface-1 overflow-hidden">
             {/* Header with quick add */}
-            <div className="px-5 pt-4 pb-3 border-b border-border/40">
+            <div className="px-5 pt-4 pb-3 border-b border-border/30">
               <p className="section-label mb-3">{segmentLabel[segment]}</p>
               <form onSubmit={e => { e.preventDefault(); handleQuickAdd(); }} className="flex gap-2">
                 <Input
@@ -117,7 +112,7 @@ export default function PlanPage() {
             ) : (
               <div>
                 {filteredTasks.map((task, i) => (
-                  <div key={task.id} className={`flex items-center gap-3 px-5 py-2.5 group row-hover ${i > 0 ? 'border-t border-border/30' : ''}`}>
+                  <div key={task.id} className={`flex items-center gap-3 px-5 py-2.5 group row-hover ${i > 0 ? 'border-t border-border/25' : ''}`}>
                     <button
                       onClick={() => toggleTaskDone(task.id)}
                       className="h-4 w-4 rounded border border-border shrink-0 flex items-center justify-center hover:border-primary transition-colors"
@@ -140,7 +135,7 @@ export default function PlanPage() {
 
             {/* Footer */}
             {data.tasks.filter(t => t.status !== 'done').length > 12 && (
-              <div className="px-5 py-3 border-t border-border/40">
+              <div className="px-5 py-3 border-t border-border/30">
                 <button onClick={() => navigate('/tasks')} className="text-xs text-primary hover:underline flex items-center gap-1">
                   View all tasks <ChevronRight className="h-3 w-3" />
                 </button>
@@ -152,7 +147,7 @@ export default function PlanPage() {
         {/* Right: Schedule rail */}
         <div className="hidden lg:block space-y-4">
           <div className="surface-1 overflow-hidden">
-            <div className="px-4 py-3.5 border-b border-border/40 flex items-center justify-between">
+            <div className="px-4 py-3.5 border-b border-border/30 flex items-center justify-between">
               <p className="section-label">Today's Schedule</p>
               <button onClick={() => navigate('/calendar')} className="text-[11px] text-primary hover:underline">Calendar</button>
             </div>
@@ -168,7 +163,7 @@ export default function PlanPage() {
             ) : (
               <div>
                 {todayAgenda.slice(0, 6).map((item, i) => (
-                  <div key={item.id} className={`flex items-center gap-2.5 px-4 py-2.5 row-hover ${i > 0 ? 'border-t border-border/30' : ''}`}>
+                  <div key={item.id} className={`flex items-center gap-2.5 px-4 py-2.5 row-hover ${i > 0 ? 'border-t border-border/25' : ''}`}>
                     <div className="h-1.5 w-1.5 rounded-full bg-primary/40 shrink-0" />
                     <span className="text-sm flex-1 truncate">{item.title}</span>
                     <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
@@ -177,7 +172,7 @@ export default function PlanPage() {
                   </div>
                 ))}
                 {todayAgenda.length > 6 && (
-                  <div className="px-4 py-2.5 border-t border-border/30">
+                  <div className="px-4 py-2.5 border-t border-border/25">
                     <button onClick={() => navigate('/calendar')} className="text-xs text-primary hover:underline flex items-center gap-1">
                       +{todayAgenda.length - 6} more <ChevronRight className="h-3 w-3" />
                     </button>
