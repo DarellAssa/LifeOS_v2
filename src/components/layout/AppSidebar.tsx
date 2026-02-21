@@ -1,5 +1,5 @@
 import {
-  Sun, ClipboardList, Inbox, TrendingUp, MoreHorizontal, Leaf,
+  Sun, ClipboardList, Inbox, Calendar, MoreHorizontal, Leaf,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -14,8 +14,8 @@ type NavItem = { title: string; url: string; icon: any };
 const navItems: NavItem[] = [
   { title: 'Today', url: '/', icon: Sun },
   { title: 'Plan', url: '/plan', icon: ClipboardList },
+  { title: 'Calendar', url: '/calendar', icon: Calendar },
   { title: 'Capture', url: '/capture', icon: Inbox },
-  { title: 'Progress', url: '/progress', icon: TrendingUp },
   { title: 'More', url: '/more', icon: MoreHorizontal },
 ];
 
