@@ -4,12 +4,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import {
   CheckSquare, Inbox, ArrowRight, Sparkles, Leaf, Calendar,
-  Clock, Target, MessageSquare, ChevronRight,
+  Clock, Target, MessageSquare, ChevronRight, Zap,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
-/* ── Typing effect hook — makes Jarvis "speak" ── */
+/* ── Typing effect hook ── */
 function useTypingEffect(text: string, speed = 18, startDelay = 600) {
   const [displayed, setDisplayed] = useState('');
   const [isDone, setIsDone] = useState(false);
@@ -69,6 +69,14 @@ function generateBriefing(
   return parts.join(' ');
 }
 
+/* ── Energy label mapping ── */
+function getEnergyLabel(priority?: string) {
+  if (priority === 'high') return { label: 'High energy', className: 'today-tag-energy-high' };
+  if (priority === 'med') return { label: 'Med energy', className: 'today-tag-energy-med' };
+  if (priority === 'low') return { label: 'Low energy', className: 'today-tag-energy-low' };
+  return null;
+}
+
 /* ── TODAY PAGE ── */
 export default function TodayPage() {
   const {
@@ -91,6 +99,7 @@ export default function TodayPage() {
   const hour = new Date().getHours();
   const userName = profile?.first_name || '';
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+  const briefingTimeLabel = hour < 12 ? 'Morning briefing' : hour < 17 ? 'Afternoon briefing' : 'Evening briefing';
 
   const briefingText = useMemo(
     () => generateBriefing(todayTasks, overdue, inboxCount, todayAgenda.length, weekCompletion),
@@ -122,7 +131,7 @@ export default function TodayPage() {
 
   return (
     <div className="today-page space-y-8 pb-12">
-      {/* Animated background orbs */}
+      {/* Animated background */}
       <div className="today-bg" aria-hidden="true">
         <div className="today-orb today-orb-1" />
         <div className="today-orb today-orb-2" />
@@ -131,14 +140,15 @@ export default function TodayPage() {
 
       {/* Greeting */}
       <div className="today-greeting animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="today-greeting-glow" aria-hidden="true" />
         <h1 className="today-title">
           Good {greeting}{userName ? `, ${userName}` : ''} <span className="today-wave">👋</span>
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-muted-foreground mt-1.5 tracking-wide">
           {format(new Date(), 'EEEE, MMMM d, yyyy')}
         </p>
         {!hasNoData && (
-          <div className="flex flex-wrap gap-2 mt-4">
+          <div className="flex flex-wrap gap-2.5 mt-5">
             {remainingCount > 0 && (
               <span className="today-pill today-pill-accent">
                 <span className="today-pill-dot today-pill-dot-accent" />
@@ -154,7 +164,7 @@ export default function TodayPage() {
             {weekCompletion > 0 && (
               <span className="today-pill today-pill-green">
                 <span className="today-pill-dot today-pill-dot-green" />
-                Week {weekCompletion}% on track
+                Week {weekCompletion}%
               </span>
             )}
           </div>
@@ -172,10 +182,10 @@ export default function TodayPage() {
             A calm space to organize your life. Start by capturing a thought or adding your first task.
           </p>
           <div className="flex flex-wrap justify-center gap-3 mt-5">
-            <Button onClick={() => navigate('/capture')} className="gap-2">
+            <Button onClick={() => navigate('/capture')} className="gap-2 rounded-xl">
               <Inbox className="h-4 w-4" /> Capture something
             </Button>
-            <Button variant="outline" onClick={() => navigate('/plan')} className="gap-2">
+            <Button variant="outline" onClick={() => navigate('/plan')} className="gap-2 rounded-xl">
               <CheckSquare className="h-4 w-4" /> Add a task
             </Button>
           </div>
@@ -186,22 +196,24 @@ export default function TodayPage() {
         <>
           {/* Jarvis Briefing */}
           <div className="today-briefing animate-in fade-in slide-in-from-bottom-4 duration-700 delay-75">
+            <div className="today-briefing-glow" aria-hidden="true" />
             <div className="today-briefing-shimmer" />
             <div className="today-briefing-inner">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3.5 mb-5">
                 <div className="today-jarvis-orb">
                   <Sparkles className="h-5 w-5 text-white" />
+                  <div className="today-jarvis-ring" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-sm font-bold tracking-tight">Jarvis</h2>
-                  <p className="text-[11px] text-muted-foreground">Your morning briefing</p>
+                  <h2 className="text-[15px] font-bold tracking-tight">Jarvis</h2>
+                  <p className="text-[11px] text-muted-foreground">{briefingTimeLabel}</p>
                 </div>
                 <span className="today-live-badge">
                   <span className="today-live-dot" />
                   Live
                 </span>
               </div>
-              <p className="text-[14px] leading-relaxed text-muted-foreground min-h-[48px]">
+              <p className="text-[14.5px] leading-[1.8] text-muted-foreground">
                 {typedBriefing}
                 {!briefingDone && typedBriefing.length > 0 && (
                   <span className="today-cursor" />
@@ -212,7 +224,7 @@ export default function TodayPage() {
 
           {/* Your Focus */}
           {focusItems.length > 0 && (
-            <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
+            <div className="space-y-3.5 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
               <div className="flex items-center justify-between px-1">
                 <h2 className="today-section-label">Your Focus</h2>
                 <button onClick={() => navigate('/plan')}
@@ -220,38 +232,42 @@ export default function TodayPage() {
                   See all in Plan →
                 </button>
               </div>
-              <div className="space-y-2.5">
-                {focusItems.map((item) => (
-                  <div key={item.id}
-                    className={`today-focus-card group ${item.isOverdue ? 'today-focus-overdue' : ''}`}>
-                    <button onClick={(e) => { e.stopPropagation(); toggleTaskDone(item.id); }}
-                      className="today-check-ring" aria-label="Complete task" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                        {item.title}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        {item.isOverdue && <span className="today-tag today-tag-rose">⚠ Overdue</span>}
-                        {item.energy && (
-                          <span className={`today-tag ${
-                            item.energy === 'high' ? 'today-tag-rose' :
-                            item.energy === 'med' ? 'today-tag-amber' : 'today-tag-green'
-                          }`}>
-                            {item.energy === 'high' ? 'High' : item.energy === 'med' ? 'Med' : 'Low'}
-                          </span>
-                        )}
+              <div className="space-y-3">
+                {focusItems.map((item) => {
+                  const energy = getEnergyLabel(item.energy);
+                  return (
+                    <div key={item.id}
+                      className={`today-focus-card group ${item.isOverdue ? 'today-focus-overdue' : ''}`}>
+                      <button onClick={(e) => { e.stopPropagation(); toggleTaskDone(item.id); }}
+                        className="today-check-ring" aria-label="Complete task" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14.5px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                          {item.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          {item.isOverdue && (
+                            <span className="today-tag today-tag-overdue">
+                              <Clock className="h-3 w-3" /> Overdue
+                            </span>
+                          )}
+                          {energy && (
+                            <span className={`today-tag ${energy.className}`}>
+                              <Zap className="h-3 w-3" /> {energy.label}
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-60 transition-all duration-200 transform group-hover:translate-x-0.5" />
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-60 transition-all transform group-hover:translate-x-0.5" />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
           {/* Today's Flow */}
           {todayAgenda.length > 0 && (
-            <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+            <div className="space-y-3.5 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
               <div className="flex items-center justify-between px-1">
                 <h2 className="today-section-label">Today's Flow</h2>
                 <button onClick={() => navigate('/calendar')}
@@ -261,14 +277,16 @@ export default function TodayPage() {
               </div>
               <div className="today-timeline">
                 {todayAgenda.slice(0, 5).map((item) => (
-                  <div key={item.id} className="today-tl-item">
+                  <div key={item.id} className="today-tl-item group">
                     <div className={`today-tl-dot ${item.type === 'event' ? 'today-tl-dot-event' : 'today-tl-dot-focus'}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-medium text-muted-foreground tabular-nums">
+                      <p className="text-[11px] font-semibold text-muted-foreground tabular-nums tracking-wide">
                         {format(new Date(item.startDateTime), 'h:mm a')} – {format(new Date(item.endDateTime), 'h:mm a')}
                       </p>
-                      <p className="text-[14px] font-semibold text-foreground truncate">{item.title}</p>
-                      {item.location && <p className="text-[12px] text-muted-foreground mt-0.5">{item.location}</p>}
+                      <p className="text-[14px] font-semibold text-foreground truncate mt-0.5">{item.title}</p>
+                      {item.location && (
+                        <p className="text-[12px] text-muted-foreground mt-0.5">{item.location}</p>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -277,16 +295,20 @@ export default function TodayPage() {
           )}
 
           {/* Copilot Bar */}
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 pt-2">
             <button onClick={() => handleOpenCopilot()} className="today-copilot-bar group">
-              <div className="today-copilot-icon">
+              <div className="today-copilot-icon group-hover:today-copilot-icon-hover">
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
-              <span className="text-sm text-muted-foreground">
-                <strong className="text-foreground/70">Talk to Jarvis</strong>
-                {' — "plan my week" · "what\'s next?"'}
-              </span>
-              <span className="text-[11px] text-muted-foreground bg-muted px-2.5 py-1 rounded-md font-mono ml-auto">
+              <div className="flex-1 min-w-0 text-left">
+                <span className="text-[13px] font-semibold text-foreground/70 group-hover:text-foreground/90 transition-colors">
+                  Talk to Jarvis
+                </span>
+                <span className="text-[12px] text-muted-foreground ml-2 hidden sm:inline">
+                  "plan my week" · "what's next?" · "reschedule"
+                </span>
+              </div>
+              <span className="text-[11px] text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-lg font-mono">
                 ⌘K
               </span>
             </button>
